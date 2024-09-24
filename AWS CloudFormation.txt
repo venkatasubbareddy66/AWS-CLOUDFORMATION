@@ -110,6 +110,177 @@ Resources:
 
 
 
+======================================================== 2 Cloud Formation Getting Started ======================================================== 
+
+
+
+
+
+-- if you have code in json , if you want to convert from json to yaml , u can try on this website 
+
+
+https://www.json2yaml.com/ 
+
+
+
+
+
+----------------------------------- create s3 bucket using CF
+
+
+
+
+-- try to create bucket using cfn
+
+
+Resources:
+  MyS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties: {}
+
+
+
+-- upload this code and it will create bucket for you 
+
+-- here  Properties: {}  , so we are providing any Properties so open and close brackets , we wont get any error
+
+-- there's a bucket named string, if you do not specify it, then you will get a random bucket name.
+
+
+
+
+
+
+----------------------------------- Update the s3 bucket using CF 
+
+
+
+-- So before we update our stack, let's talk about the CloudFormation update behavior.
+
+-- So CloudFormation updates resources based on differences between what you submit and the stack's current template.
+
+-- So we'll look at where there's change and do the necessary updates.
+
+-- The method of how it does it's updates depends on the property you have changed for a specific resource.
+
+
+---------------------- IMP to know
+
+
+
+-- you have three kinds of changes that can happen in CloudFormation.
+
+      1 There is an updates with no interruption :
+            
+            - That means that it doesn't disrupt the resources operations and it doesn't change the physical ID of your resources.
+
+            - For example, if you are updating the IAM instance profile of an EC2 instance, this is something you can do in the console without stopping  your EC2 instance and so can you while using CloudFormation.
+    
+      2 Update with some interruption :
+
+            - for example, an EC2 instance being stopped. Well, if we change the instance type of our EC2 instance from a t2.micro to t2.large. It requires it to be stopped and then restarted,
+
+            - so this is why it's called update with some interruption.
+
+      3 replacements :
+
+            - Replacements means that you have to recreate a new resource with a new physical ID, because the properties you have changed do not match with the current stack states.   
+
+            - so therefor, the new resource will be created, the references will be changed from other resources to the new resource,and then the older resources will be deleted.
+
+            - For example, if you change the availability zone of an RDS database instance, then the previous one will have to be deleted and the new one will have to be created.
+
+
+
+-- we'll see more about updates and how we can maybe save some of these objects or prevent them from being replaced.
+
+
+-- we're going to update a S3 bucket. And we'll consider two types of updates.
+
+-- We'll consider the updates with no interruption by adding some Access Control.
+
+-- And we'll also see a replacement updates by updating the name of the S3 buckets.
+
+-- So let's have a look to see how CloudFormation reacts in both these cases.
+
+
+https://repost.aws/knowledge-center/cloudformation-objectownership-acl-error    - REF 
+
+
+
+
+
+AWSTemplateFormatVersion: "2010-09-09"
+
+Resources:
+  PortalBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: LogDeliveryWrite
+      VersioningConfiguration:
+        Status: Enabled
+      WebsiteConfiguration:
+        IndexDocument: 'index.html'
+        ErrorDocument: 'error.html'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+
+
+-- This allows you to activate ACLs on the bucket.
+
+
+-- now let's update and upload this templates and see what happens.
+
+-- now change the bucket name the update requires a replacement. so make sure that your S3 bucket has zero objects.
+
+-- this one will be deleted and a new one will be created.
+
+
+
+
+Resources:
+  PortalBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: LogDeliveryWrite
+      VersioningConfiguration:
+        Status: Enabled
+      WebsiteConfiguration:
+        IndexDocument: 'index.html'
+        ErrorDocument: 'error.html'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      BucketName: "insert-some-random-string-here-123452433"
+
+
+
+
+
+-- upload this code and see in CF console
+
+-- in Changeset preview , u can see that replacement = true 
+
+-- there is my S3 bucket that is going to create a new physical resource,
+
+-- once that S3 bucket is created, the other one that we have from right here will be deleted.
+
+-- delete the stack , make sure no objects in s3 bucket
+
+
+
+
+
+
 
 
 
