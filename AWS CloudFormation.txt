@@ -284,7 +284,1128 @@ Resources:
 
 
 
+----------------------------------- CloudFormation template options
 
 
+
+-- So there's a lot of options you can do when you upload a CloudFormation template.
+
+    - Tags : 
+    
+         when we specify a tag in CloudFormation these tags will be passed on to every single resource created by CloudFormation which is quite handy.
+
+    - Permissions: 
+     
+         Permissions is for us to be able to specify an IAM role to create all the resources within CloudFormation.
+
+    - Notification options : 
+    
+         Notification options is to receive all these events around how your CloudFormation stack is doing to an SNS topic.
+
+    - Timeout :
+    
+         is to say how long you're willing to wait before declaring that the CloudFormation templates, that creation has failed.
+     
+    - Roll back on failure:
+
+         Roll back on failure is allowing you to not being able to delete your resources, if in case they're not being created correctly
+
+    - Rollback configuration:
+
+         Rollback configuration which is allowing you to set up a time or a specific Cloudwatch alarm 
+
+    - Termination protection:
+
+         Termination protection is a way for you to disable the deletion of your CloudFormation template accidentally.     
+
+
+
+
+
+----------------------------------- CloudFormation – Building Blocks
+
+
+• Template’s Components
+
+        • AWSTemplateFormatVersion – identifies the capabilities of the template “2010-09-09” • Description – comments about the template
+
+        • Resources (MANDATORY) – your AWS resources declared in the template
+
+        • Parameters – the dynamic inputs for your template
+
+        • Mappings – the static variables for your template
+
+        • Outputs – references to what has been created
+
+        • Conditionals – list of conditions to perform resource creation
     
  
+
+
+
+
+----------------------------------- Deploying CloudFormationTemplates
+
+
+
+• Manual way
+
+    • Editing templates in Application Composer or code editor
+    • Using the console to input parameters, etc...
+    • We’ll mostly do this way in the course for learning purposes
+
+
+• Automated way
+
+    • Editing templates in a YAML file
+    • Using the AWS CLI (Command Line Interface) to deploy the templates, or using a Continuous Delivery (CD) tool
+    • Recommended way when you fully want to automate your flow
+
+
+
+
+
+
+
+
+======================================================== CloudFormation – Parameters ======================================================== 
+
+
+
+
+• Parameters are a way to provide inputs to your AWS CloudFormation template
+
+• They’re important to know about if:
+
+     • You want to reuse your templates across the company
+
+     • Some inputs can not be determined ahead of time
+
+
+• Parameters are extremely powerful, controlled, and can prevent errors from happening in your templates, thanks to types
+
+
+
+
+
+
+
+-------------------------- When should you use a Parameter?
+
+
+• Ask yourself this:
+
+    • Is this CloudFormation resource configuration likely to change in the future? 
+    • If so, make it a parameter
+
+
+
+
+
+
+-------------------------- CloudFormation – Parameters Settings
+
+
+• Parameters can be controlled by all these settings:
+
+
+   • Type:
+       
+       • String – A literal string
+       • Number – An integer or float
+       • CommaDelimitedList – An array of literal strings that are separated by commas
+       • List<Number> – An array of integers or floats
+       • AWS-Specific Parameter (to help catch invalid values – match against existing values in the AWS account)
+       • List<AWS-Specific Parameter>
+       • SSM Parameter (get parameter value from SSM Parameter store)
+       • Description
+       • ConstraintDescription (String)
+       • Min/MaxLength
+       • Min/MaxValue
+       • Default
+       • AllowedValues (array)
+       • AllowedPattern (regex)
+       • NoEcho (Boolean)
+       • AWS::EC2::KeyPair::KeyName – An Amazon EC2 key pair name
+       • AWS::EC2::SecurityGroup::Id – A security group ID
+       • AWS::EC2::Subnet::Id – A subnet ID
+       • AWS::EC2::VPC::Id – A VPC ID
+       • List<AWS::EC2::SecurityGroup::Id> – An array of security group IDs
+       • List<AWS::EC2::Subnet::Id> – An array of subnet IDs
+
+
+
+
+
+
+-------------------------- How to Reference a Parameter?
+
+
+• The Fn::Ref function can be leveraged to reference parameters
+
+• Parameters can be used anywhere in a template
+
+Except:
+  
+    - TemplateFormatVersion,
+    - description, 
+    - transform and 
+    - mappings.
+
+• The shorthand for this inYAML is !Ref
+
+• The function can also reference other elements within the template
+
+
+
+
+
+
+------------------------------- CloudFormation – Parameters Example
+
+     1 • AllowedValues (array)
+
+Parameters:
+ InstanceType:
+   Description: Choose an ec2 type
+   Type: String
+   AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t2.small
+
+
+Resources:
+  Ec2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+       InstanceType: !Ref InstanceType
+       ImageId: xxxxxxxxxxxxxx
+
+
+
+-- Here , we have a parameter called InstanceType. To choose an EC2 InstanceType of Type: String.
+
+-- But we have defined AllowedValues being t2.micro, t2.small, or t2.medium with a Default being t2.micro. And this parameter is reused in the EC2Instance.
+
+-- So thanks to it, we'll have a dropdown and the user can only select one of these three values, hence giving them choice while giving you control.
+
+
+
+
+
+
+
+     2 NoEcho (Boolean)
+
+
+Parameters:
+ DBPassword:
+   Description: db password
+   Type: String
+   NoEcho: true
+
+Resources:
+  MyDBInstance:
+   Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBInstanceClass: db.t2.microParameters
+      AllocatedStorage: 20
+      Engine: mysql 
+      MasterUsername: administration
+      MasterUserpassword: !Ref DBPassword
+      DBInstanceIdentifier: MydbInstance
+
+
+-- So for example, say we want as a parameter to put in the database password, but of course it is a password so we have to keep it secret.
+
+-- So we want to remove it from the logs and so on. So we'll have NoEcho: true , so that the password is not displayed anywhere.
+
+
+
+
+
+
+
+
+
+------------------------------- Parameters Hands on
+
+
+
+
+create one yaml file like this with parameters
+
+
+
+
+Parameters:
+  SecurityGroupDescription:
+    Description: Security Group Description (Simple parameter)
+    Type: String
+
+  SecurityGroupPort:
+    Description: Simple Description of a Number Parameter, with MinValue and MaxValue
+    Type: Number
+    MinValue: 1150
+    MaxValue: 65535
+
+  InstanceType:
+    Description: WebServer EC2 instance type (has default, AllowedValues)
+    Type: String
+    Default: t2.small
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+    ConstraintDescription: must be a valid EC2 instance type.
+
+  DBPwd:
+    NoEcho: true
+    Description: The database admin account password (won't be echoed)
+    Type: String
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances. Linked to AWS Parameter
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+
+  SecurityGroupIngressCIDR:
+    Description: The IP address range that can be used to communicate to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+
+  MyVPC:
+    Description: VPC to operate in
+    Type: AWS::EC2::VPC::Id
+
+  MySubnetIDs:
+    Description: Subnet IDs that is a List of Subnet Id
+    Type: "List<AWS::EC2::Subnet::Id>"
+
+  DbSubnetIpBlocks:
+    Description: "Comma-delimited list of three CIDR blocks"
+    Type: CommaDelimitedList
+    Default: "10.0.48.0/24, 10.0.112.0/24, 10.0.176.0/24"
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      #we reference the InstanceType parameter
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      ImageId: ami-0742b4e673072066f
+      # here we reference an internal CloudFormation resource
+      SubnetId: !Ref DbSubnet1
+
+  MySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Ref SecurityGroupDescription
+      SecurityGroupIngress:
+        - CidrIp: !Ref SecurityGroupIngressCIDR
+          FromPort: !Ref SecurityGroupPort
+          ToPort: !Ref SecurityGroupPort
+          IpProtocol: tcp
+      VpcId: !Ref MyVPC
+
+  DbSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      # the select function allows us to select across a list
+      CidrBlock: !Select [0, !Ref DbSubnetIpBlocks]
+
+  DbSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      # the select function allows us to select across a list
+      CidrBlock: !Select [1, !Ref DbSubnetIpBlocks]
+      
+  DbSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      # the select function allows us to select across a list
+      CidrBlock: !Select [2, !Ref DbSubnetIpBlocks]
+
+
+
+
+Explanation: in above script we have different types of parameters 
+
+- (\d{1,3}) = 1-3 digits 
+
+- we can reference these parameters within our templates. check resource block
+
+- the Ref function works equally well for parameters, as well as references
+
+- deploy this stack and observe how it is Getting created resources
+
+
+
+
+
+---------------------------------------- ADVANCED SSM Parameter Type
+
+
+
+-- So let's go ahead and learn about how to use a parameter that comes from the Systems Manager Parameter Store. So it's called an SSM Parameter type.
+
+-- So the idea is that we want to store the value of the parameter outside of your CloudFormation template in a service called the Parameter Store.
+
+IMP -- So the value of the parameter in our CloudFormation template is going to present the key in the Parameter Store.
+
+-- the CloudFormation will always fetch the latest value of the parameter independents or source or you can not specify a specific version.
+
+-- CloudFormation does not store Secure String values.
+
+-- So if you're using a parameter that is secure, then it's compatible with CloudFormation and the validation can be done on the SSM Parameter keys but you can not do a validation on the value returned by the Parameter Store.
+
+
+
+
+
+---------------------- Example - Fetch Latest AMI ID's
+
+
+-- So the idea is that when we are launching a new two instance and want to use, for example, Amazon Linux 2.
+
+-- We know that the AMI ID does change from region to region. We know that the AMI ID does change from region to region.
+
+-- And on top of that, the latest Amazon Linux 2 always gets updated from AWS from time to time.
+
+-- So that means we need to update all of our templates to keep up with the latest AMI ID of the latest updates of Amazon Linux 2
+
+-- So instead there is a Parameter in the Parameter store from AWS which does always return the latest AMI ID for your Amazon Linux 2. Then on top of it, it is going to be changing from region to region.
+
+-- So we moved the templates and you pass in this Parameter and you do a create stack, CloudFormation will fetch the latest AMI ID from the SSM Parameter store, which will be returned and then use within your templates.
+
+
+
+
+
+
+---------------------- ADVANCED SSM Parameter Type Hands On
+
+
+-- create template like this 
+
+
+Parameters:
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /dev/ec2/instanceType
+    
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref ImageId
+
+
+
+
+
+-- So the first one is instance type, and we're going to specify the instance type for an EC2 instance.
+
+-- And so the idea is that we don't want to specify the instance type directly as the parameter, but instead, we want to reference the instance type coming from the SSM parameter store
+
+-- open parameter store in console and create parameter with the name /dev/ec2/instanceType , Tier = std , Type = string , Data type = text,value = t2.micro
+
+
+
+
+-- The second parameter we have in our confirmation template is ImageID. And again, it is a type SSM parameter.
+
+-- now and deploy the stack in CF 
+
+-- once u upload the stacj the image id /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2  , automatically fetch latest AMI  from the public parameters store 
+
+-- create stack , ec2 created , so everry time it will fetch latest AMI from the parameter store 
+
+-- now chnage the value of parameter from t2.micro to t2.small , update the stack , 
+
+-- it will take values from parameter store and update the instance type according that value , in this process the ec2 instance will get stopped and updates and sgin Started
+
+
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION RESOURCES, =========================================================
+
+
+
+
+• Resources are the core of your CloudFormation template (MANDATORY)
+
+• They represent the different AWS Components that will be created and configured
+
+• Resources are declared and can reference each other
+
+• AWS figures out creation, updates and deletes of resources for us
+
+• There are over 700 types of resources (!)
+
+• Resource types identifiers are of the form:
+
+       service-provider::service-name::data-type-name
+
+       EG : AWS::EC2::Volume
+
+
+
+https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-instance.html  - ref 
+
+
+
+
+
+
+
+
+
+------------------------------------------ optional attributes for resource
+
+
+
+- DependsOn :
+
+    - this is a very useful one to allow to draw a dependency between two resources.
+
+    - For example, you want to only create an ECS cluster after the underlying Auto Scaling Group is created.
+
+- DeletionPolicy:
+
+    - this is going to allow you to protect resources from being deleted, even if, the CloudFormation stack is deleted.
+
+    - For example, you never want to lose an RDS database that you create through a CloudFormation stack.Then, you would add a DeletionPolicy to it.
+
+
+- UpdateReplacePolicy:
+
+    - The UpdateReplacePolicy is also similar. The system protects resources from being replaced during a CloudFormation update.
+
+    
+
+
+
+---------------------------------------- 1 DependsOn :
+
+
+-- allows you to make sure that a resource is created after another one because they depend on each other.
+
+• Applied automatically when using !Ref and !GetAtt
+
+• Use with any resource
+
+
+
+Resources:
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId:
+        Fn::FindInMap:
+        - RegionMap
+        - Ref: AWS::Region
+        - AMI
+    DependsOn: myDB
+  myDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: '5'
+      DBInstanceClass: db.t2.small
+      Engine: MySQL
+      EngineVersion: '5.5'
+      MasterUsername: MyName
+      MasterUserPassword: MyPassword
+
+
+
+-- we can see that we have an EC2 instance and an RDS database instance being created. And in this example we're saying that we want the EC2 instance to depend on the database.      
+
+-- so therefore the EC2 instance will only be created once the database itself has been successfully created.
+
+
+
+
+-------------------------------- DependsOn hands On
+
+
+
+Parameters:  
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  MyS3Bucket:
+    Type: AWS::S3::Bucket
+
+  # the EC2 instance will be created after the S3 bucket
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t2.micro
+    DependsOn: MyS3Bucket
+
+
+
+
+
+-- the EC2 instance will only be created after the S3 bucket. And in case of a deletion, it will be deleted first and then the S3 bucket will be deleted after.
+
+-- uplaod the stack and observe 
+
+-- now delete the stack u can observe that First, my EC2 instance should be deleted , then the S3 bucket will be deleted.
+
+
+
+
+
+
+
+-------------------------------- 2 DeletionPolicy
+
+
+
+• Control what happens when the CloudFormation template is deleted or when a resource is removed from a CloudFormation template
+
+• Extra safety measure to preserve and backup resources
+
+• Default DeletionPolicy=Delete
+
+      • Delete won’t work on an S3 bucket if the bucket is not empty
+
+
+
+-- So by default, we've seen that when we delete a CloudFormation template, all the resources within are also deleted. That means that the default DeletionPolicy is delete, so you don't have to specify it because it is the default.
+
+
+EG:1
+
+Resources:
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-0a3c3a20c09d6f377
+      InstanceType: t2.micro
+    DeletionPolicy: Delete  
+
+
+
+
+
+-------------------------------- CloudFormation – DeletionPolicy Retain
+
+
+• DeletionPolicy=Retain:
+
+      • Specify on resources to preserve in case of CloudFormation deletes
+
+      • Works with any resources
+
+
+
+
+EG :
+
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  myS3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+
+
+
+-- So example here, we have a S3, and we know that by default, it would be deleted when I delete my CloudFormation template, 
+
+-- but maybe we actually wanna keep it, keep the data within because we care about the data of this bucket. And so we would specify at the bottom DeletionPolicy retain.
+
+-- And so even if I delete my CloudFormation templates, this S3 Bucket would stay, and this works with any resources.
+
+
+
+
+
+
+
+
+----------------------------- 3 CloudFormation – DeletionPolicy Snapshot
+
+
+• DeletionPolicy=Snapshot
+
+• Create one final snapshot before deleting the resource
+
+• Examples of supported resources:
+
+    • EBS Volume, ElastiCache Cluster, ElastiCache ReplicationGroup
+
+    • RDS DBInstance, RDS DBCluster, Redshift Cluster, Neptune DBCluster, DocumentDB DBCluster
+
+
+
+
+
+----------- LAB 
+
+
+-- create one yaml file that has DeletionPolicy
+
+
+Resources:
+  MySG:
+    Type: AWS::EC2::SecurityGroup
+    DeletionPolicy: Retain
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+
+  MyEBS:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Snapshot
+    Properties:
+      AvailabilityZone: us-east-1a
+      Size: 1
+      VolumeType: gp2
+
+
+
+-- in above example , there is a security group and the DeletionPolicy is retained. So that means that if I delete my transformation stack, this security group should stay.
+
+-- And there is an EBS volume, and the DeletionPolicy is a snapshot. So that means that upon deleting the stack, the volume should go away, but a snapshot should be created first.
+
+-- let's see how it is working 
+
+-- upload yaml file and create one stack 
+
+-- once the resource is created , do delete the stack
+
+-- u can observe that MySG = DELETE_SKIPPED , 'coz we have given retain 
+
+-- ebs volume is deleted but the snapshot is already created for u go n check in console 
+
+-- u can delete manually through console , if u want to delete 
+
+
+
+
+
+
+
+
+
+------------------------------- 3 UpdateReplacePolicy:
+
+
+
+-- this is to control what happens to a resource if you update a property on the resource whose update behavior is Replacement.
+
+-- For example, if you have a database instance and you change the availabilities on property then it's going to be replaced entirely.
+
+-- this can be used with any kind of resource.
+
+1 By default the UpdateReplacePolicy = delete:
+
+         - that means that CloudFormation will delete the old resource and create a new one with a new physical ID and we have observed that behavior in the past,
+
+-- but we can also set Update Replace Policy to retain. In this case, the old resource will be retained and removed from CloudFormation's scope and then a new resource will be created.         
+
+2 UpdateReplacePolicy = Retain:
+
+         - keeps the resource
+
+3 UpdateReplacePolicy = Snapshot:
+
+         - the snapshot itself that is created, as of this update, is not within CloudFormation's scope.
+
+         - It exists, but it will not appear as a resource within your CloudFormation template.
+
+
+
+
+
+
+------------------------------- what is the difference between a Deletion Policy and an Update Replace Policy?
+
+
+
+-- Well, they go actually hand-in-hand together.
+
+-- So the Update Replace Policy only applies to resources that are being replaced during a stack update,so this applies to stacks update,
+
+-- while a deletion policy applies to resources deleted when a stack is deleted or when the resource definition is removed and therefore the underlying resource is deleted.
+
+-- So they go hand-in-hand together and you then must use both if you want to protect a resource entirely,
+
+
+
+
+
+----------------------------- hands On for both
+
+
+
+
+Parameters:
+  BucketName:
+    Type: String
+
+Resources:
+  MyS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+
+
+
+
+
+-- create stack and it will create s3 bucket 
+
+-- now update the stack and observe
+
+-- then there is no deletion of the previous resource because of the update replace policy
+
+-- so that means that both my buckets exist.
+
+-- but for the management of the buckets under CloudFormation only the latest one is referenced. The previous one is just removed from the scope of CloudFormation.
+
+-- if I delete my stack
+
+-- which also has, by the way, a deletion policy of Retain
+
+-- so both my buckets are going to be retained and the previous one will not be deleted either.
+
+-- So we would need to manually delete them ourself.
+
+
+
+
+
+
+
+
+----------------------------- CloudFormation – Resources FAQ
+
+
+• Can I create a dynamic number of resources?
+
+         - For example, you say, hey, I want to create four S3 buckets at a time.
+
+         - Yes, you can by using CloudFormation Macros and Transform
+
+
+• Is every AWS Service supported?
+
+         - Almost. Only a select few niches are not there yet
+
+         - You can work around that using CloudFormation Custom Resources
+
+         - Usually when there is a new feature of AWS, the CloudFormation update to support the feature comes very, very soon 
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION MAPPINGS =========================================================
+
+
+
+• Mappings are fixed variables within your CloudFormation template
+
+• They’re very handy to differentiate between different environments (dev vs prod), regions (AWS regions), AMI types...
+
+• All the values are hardcoded within the template
+
+
+
+EG : 
+
+Mappings: 
+  Mapping01: 
+    Key01: 
+      Name: Value01
+    Key02: 
+      Name: Value02
+    Key03: 
+      Name: Value03
+
+
+
+
+
+RegionMap: 
+    us-east-1:
+      HVM64: ami-0ff8a91507f77f867
+      HVMG2: ami-0a584ac55a7631c0c
+    us-west-1:
+      HVM64: ami-0bdb828fd58c52235
+      HVMG2: ami-066ee5fd4a9ef77f1
+    eu-west-1:
+      HVM64: ami-047bb4163c506cd98
+      HVMG2: ami-0a7c483d527806435
+    ap-northeast-1:
+      HVM64: ami-06cd52961ce9f0d85
+      HVMG2: ami-053cdd503598e4a9d
+    ap-southeast-1:
+      HVM64: ami-08569b978cc4dfa10
+      HVMG2: ami-0be9df32ae9f92309
+
+
+-- So here, based on the region you have, so us-east-1, us-west-1, or eu-west-1, and based on the architecture you're using, for example, HVM64 or HVMG2, this is going to give you a different AMI ID every time.
+
+-- Well, we know that the AMIs are specific based on the region, so of course it makes sense to have a different AMI per region.
+
+
+
+
+
+
+
+------------------------------------------ When would you use Mappings vs. Parameters?
+
+
+
+• Mappings are great when you know in advance all the values that can be taken and that they can be deduced from variables such as
+
+    • Region
+    • Availability Zone
+    • AWS Account
+    • Environment (dev vs prod) • etc...
+
+
+• They allow safer control over the template
+
+• Use parameters when the values are really user specific ,whenever the values are really user specific and you can not predict them ahead of time.
+
+
+
+
+
+
+
+--------------------------------- Accessing Mapping Values (Fn::FindInMap)
+
+
+
+• We use Fn::FindInMap to return a named value from a specific key
+
+• !FindInMap [ MapName,TopLevelKey, SecondLevelKey ]
+
+
+EG :
+
+AWSTemplateFormatVersion: "2010-09-09"
+Mappings: 
+  RegionMap: 
+    us-east-1:
+      HVM64: ami-0ff8a91507f77f867
+      HVMG2: ami-0a584ac55a7631c0c
+    us-west-1:
+      HVM64: ami-0bdb828fd58c52235
+      HVMG2: ami-066ee5fd4a9ef77f1
+    eu-west-1:
+      HVM64: ami-047bb4163c506cd98
+      HVMG2: ami-0a7c483d527806435
+    ap-northeast-1:
+      HVM64: ami-06cd52961ce9f0d85
+      HVMG2: ami-053cdd503598e4a9d
+    ap-southeast-1:
+      HVM64: ami-08569b978cc4dfa10
+      HVMG2: ami-0be9df32ae9f92309
+Resources: 
+  myEC2Instance: 
+    Type: "AWS::EC2::Instance"
+    Properties: 
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", HVM64]
+      InstanceType: m1.small
+
+
+-- we have an EC2 instance that is using an ImageId. And this ImageId is using the FindInMap function.
+
+-- to use this FindInMap function, we first need to use a map name. So here we have the RegionMap. Then we have the top level key.
+
+-- So what we want to use in here, we have a reference to the pseudo parameter AWS::Region. So if you launch this template in us-east-1, it's going to be us-east-1, and if you launch it to us-west-1, automatically this pseudo parameter is going to resolve to us-west-1.
+ 
+-- And then finally, the type of architecture you want, for example, HVM64. And this works great because, well, AMIs are region specific, and so you want to make sure you have the right AMI for the right region and the right architecture.
+
+
+
+
+
+
+
+---------------------------------------------- Mappings Hands On
+
+
+
+-- we'll use the mapping and we'll see how we can combine it with a parameter to change and deduce values within your templates.
+
+-- So we'll do two things with our mappings. We'll change the instance type of our EC2 instance based on the, on the environment that we're in. And we'll also change the AMI of our EC2 instance based on the region we are in.
+
+-- create yaml file 
+
+
+
+
+
+Parameters:
+  EnvironmentName:
+    Description: Environment Name
+    Type: String
+    AllowedValues: [development, production]
+    ConstraintDescription: must be development or production
+
+Mappings:
+  AWSRegionArch2AMI:
+    af-south-1:
+      HVM64: ami-06db08e8636583118
+    ap-east-1:
+      HVM64: ami-0921e2da2f22f9617
+    ap-northeast-1:
+      HVM64: ami-06098fd00463352b6
+    ap-northeast-2:
+      HVM64: ami-07464b2b9929898f8
+    ap-northeast-3:
+      HVM64: ami-0b96303a469fa0678
+    ap-south-1:
+      HVM64: ami-0bcf5425cdc1d8a85
+    ap-southeast-1:
+      HVM64: ami-03ca998611da0fe12
+    ap-southeast-2:
+      HVM64: ami-06202e06492f46177
+    ca-central-1:
+      HVM64: ami-09934b230a2c41883
+    eu-central-1:
+      HVM64: ami-0db9040eb3ab74509
+    eu-north-1:
+      HVM64: ami-02baf2b4223a343e8
+    eu-south-1:
+      HVM64: ami-081e7f992eee19465
+    eu-west-1:
+      HVM64: ami-0ffea00000f287d30
+    eu-west-2:
+      HVM64: ami-0fbec3e0504ee1970
+    eu-west-3:
+      HVM64: ami-00dd995cb6f0a5219
+    me-south-1:
+      HVM64: ami-0502022ce8bfa56a9
+    sa-east-1:
+      HVM64: ami-0c27c96aaa148ba6d
+    us-east-1:
+      HVM64: ami-0742b4e673072066f
+    us-east-2:
+      HVM64: ami-05d72852800cbf29e
+    us-west-1:
+      HVM64: ami-0577b787189839998
+    us-west-2:
+      HVM64: ami-0518bb0e75d3619ca
+  EnvironmentToInstanceType:
+    development:
+      instanceType: t2.micro
+    # we want a bigger instance type in production
+    production:
+      instanceType: t2.small
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !FindInMap [EnvironmentToInstanceType, !Ref 'EnvironmentName', instanceType]
+      # Note we use the pseudo parameter AWS::Region
+      ImageId: !FindInMap [AWSRegionArch2AMI, !Ref 'AWS::Region', HVM64]
+
+
+
+
+
+
+-- So we have one parameter defined and it's the environment name, it's a string and we allow two values, development and production.
+
+-- now we have the mappings in our CloudFormation template. And this mapping has a first mapping named AWSRegionArch2AMI which is going to map a region  an architecture to an AMI ID.
+
+-- So as we can see, based on the region we're in, we have a different AMI ID.
+
+-- And the second mapping we have defined is an environment to instance type mapping.
+
+-- this one is saying, Hey, if you're in development or production, so these maps, the parameter we have defined right above.
+
+-- So if you're in development then the instance type should be t2 micro. And if you're in production then the instance type should be t2 small.
+
+-- uplaod stack and observe , it will create t2.micro isnatnce coz e are in development 
+
+-- update stack and make into production it will create t2.small
+
+
+
+
+
+
+
+
+------------------------------- CloudFormation – Pseudo Parameters
+
+
+• AWS offers us Pseudo Parameters in any CloudFormation template
+
+• These can be used at any time and are enabled by default
+
+• Important pseudo parameters:
+
+    EG ;
+
+    AWS::AccountId
+
+    AWS::Region
+
+    AWS::StackId
+
+    AWS::StackName
+
+    AWS::NotificationARNs
+
+    AWS::NoValue
+
+    AWS::URLSuffix
+
+    AWS::NotificationARNs
+
+    AWS::Partition
+
+
+
+
+
+
