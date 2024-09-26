@@ -1409,3 +1409,952 @@ Resources:
 
 
 
+
+
+
+
+======================================================== AWS CLOUDFORMATION OUTPUTS =========================================================
+
+
+
+• The Outputs section declares optional outputs values that we can import into other stacks (if you export them first)!
+
+• You can also view the outputs in the AWS Console or in using the AWS CLI
+
+• They’re very useful for example if you define a network CloudFormation, and output the variables such as VPC ID and your Subnet IDs
+
+• It’s the best way to perform some collaboration cross stack, as you let expert handle their own part of the stack
+
+
+
+
+-------------------------- CloudFormation – Outputs Example
+
+• Creating a SSH Security Group as part of one template
+
+• We create an output that references that security group
+
+
+Outputs:
+  StackSSHSecurityGroup:
+    Description: The SSH SG
+    Value: !Ref MycompanywideSShSG
+    Export:
+      Name: SSH SecurityGroup
+
+
+
+-------------------------- CloudFormation – Outputs Hands On
+
+
+
+• Creating a SSH Security Group as part of one template
+
+• We create an output that references that security group
+
+
+Outputs:
+  StackSSHSecurityGroup:
+    Description: The SSH SG
+    Value: !Ref MycompanywideSShSG
+    Export:
+      Name: SSH SecurityGroup
+
+
+
+
+
+
+-- create one yaml file 
+
+
+
+Resources:
+  # here we define a SSH security group that will be used in the entire company
+  MyCompanyWideSSHSecurityGroup:
+    # http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        # we have a lot of rules because it's a perfect security group
+        # finance team network
+      - CidrIp: 10.0.48.0/24
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+        # marketing team network
+      - CidrIp: 10.0.112.0/24
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+        # application team support network
+      - CidrIp: 10.0.176.0/24
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+
+Outputs:
+  StackSSHSecurityGroup:
+    Description: The SSH Security Group for our Company
+    Value: !Ref MyCompanyWideSSHSecurityGroup
+    Export:
+      Name: SSHSecurityGroup
+
+
+
+
+-- deploy stacj in CF and see the SG group will created and also check output section in CF Console we have o/p with name SSHSecurityGroup as export name 
+
+IMP : the outputs that are exported have to be unique within your CloudFormation account on the region, 
+
+-- if you upload the same template again u will get an error
+
+
+
+
+
+
+
+
+
+-------------------------- CloudFormation – Outputs Cross-Stack Reference
+
+
+• We then create a second template that leverages that security group
+
+• For this, we use the Fn::ImportValue function
+
+• You can’t delete the underlying stack until all the references are deleted
+
+
+
+
+
+-------------------------- CloudFormation – Outputs Cross-Stack Reference - Hands On
+
+
+create one yaml file 
+
+
+
+Parameters:  
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  MySecureInstance:
+    # http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-instance.html
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t2.micro
+      SecurityGroups:
+        # we reference the output here, using the Fn::ImportValue function
+        - !ImportValue SSHSecurityGroup
+
+
+
+-- here we are importing the SSHSecurityGroup from the previous stack , note: name should be unique and match correctly
+
+-- create new stack and deploy stack , it will create ec2 instance and that instance will get security group from the cross stack coz we are importing the security group from different stack 
+
+-- now delete first stack , u will get an error coz u have to first delete the underlying infrastructure i.e. delete the recent stack where u import the value then delete the first stack
+
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION CONDITIONS =========================================================
+
+
+
+
+• Conditions are used to control the creation of resources or outputs based on a condition
+
+• Conditions can be whatever you want them to be, but common ones are:
+   • Environment (dev / test / prod) 
+   • AWS Region
+   • Any parameter value
+
+• Each condition can reference another condition, parameter value or mapping
+
+
+
+
+
+-------------------------- How to define a Condition
+
+
+
+-- So, you have a conditions block and you create the condition name and then you apply a statement, logical statement.
+
+-- for eg:
+
+  Conditions:
+     CreateprodResource: !Equals [!Ref EnvType, prod]
+  
+
+- we have the equals function that tests whether or not the parameter environment type is matching the word prod.
+
+
+
+• The logical ID is for you to choose. It’s how you name condition
+
+• The intrinsic function (logical) can be any of the following:
+
+   • Fn::And
+   • Fn::Equals
+   • Fn::If
+   • Fn::Not
+   • Fn::Or
+
+
+
+
+
+
+----------------- How to use a Condition
+
+• Conditions can be applied to resources / outputs / etc...
+
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t2.micro
+      
+  MountPoint:
+    Type: AWS::EC2::VolumeAttachment
+    Condition: CreateProdResources
+    Properties:
+      InstanceId:
+        !Ref EC2Instance
+      VolumeId:
+        !Ref NewVolume
+      Device: /dev/sdh
+
+
+
+
+
+
+
+
+-------------------------- Intrinsic Functions – Fn::GetAtt
+
+
+
+• Attributes are attached to any resources you create and unfortunately not every attribute exists for every resource. for eg we have ref and Get for ec2 instance and not for ec2 volume (check in documentation for more clarity)
+
+-- So the best way to know which attributes exist for your resources is the documentation.
+
+
+
+
+
+-- The following example template returns the SourceSecurityGroup.OwnerAlias and SourceSecurityGroup.GroupName of the load balancer with the logical name myELB.
+
+
+EG 
+
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  myELB:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      AvailabilityZones:
+        - eu-west-1a
+      Listeners:
+        - LoadBalancerPort: '80'
+          InstancePort: '80'
+          Protocol: HTTP
+  myELBIngressGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ELB ingress group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupOwnerId: !GetAtt myELB.SourceSecurityGroup.OwnerAlias
+          SourceSecurityGroupName: !GetAtt myELB.SourceSecurityGroup.GroupName
+
+
+
+-- in general So anytime we use Ref, we're going to get the reference ID out of it.
+
+-- But if we use GetAtt to get an attribute, we have the option to get more information out of this EC2 instance. So here we have the AvailabilityZone. So for example, we can know in which AZ an instance was launched, for example, us-east-1b. You get the Id again,
+
+-- you could get the PrivateDNSName, the PrivateIp, the PublicDNSName, and the PublicIp. So while the Ref gives you usually a reference to the ID of the resource you have created, the GetAtt allows you to get more out of the resource and you can only get what CloudFormation supports in terms of attributes that are defined in documentation
+
+
+
+
+
+
+
+
+--------------------------------------- condition Hands On
+
+
+create yaml file 
+
+
+
+
+Parameters:  
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  EnvType:
+    Description: Environment type.
+    Default: test
+    Type: String
+    AllowedValues:
+      - prod
+      - test
+    ConstraintDescription: must specify prod or test.
+
+Conditions:
+  CreateProdResources: !Equals [ !Ref EnvType, prod ]
+
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t2.micro
+      
+  MountPoint:
+    Type: AWS::EC2::VolumeAttachment
+    Condition: CreateProdResources
+    Properties:
+      InstanceId:
+        !Ref EC2Instance
+      VolumeId:
+        !Ref NewVolume
+      Device: /dev/sdh
+
+  NewVolume:
+    Type: AWS::EC2::Volume
+    Condition: CreateProdResources
+    Properties:
+      Size: 1
+      AvailabilityZone:
+        !GetAtt EC2Instance.AvailabilityZone
+
+Outputs:
+  VolumeId:
+    Condition: CreateProdResources
+    Value:
+      !Ref NewVolume
+
+
+
+
+
+-- So it has two parameters. One is "ImageId" to get the latest image ID for Amazon Linux 2, and then we have the "EnvType", environment type.
+
+-- So we have created a Condition right here called "CreateProdResources". And then we are checking for the equality of the parameter "EnvType" to the value "prod".
+
+-- So if we select "prod" for the "EnvType", then this is going to be true. And if we are selecting "test", then this is going to be false.
+
+-- And from that condition, then we'll have the creation or not of specific resources within our template.
+
+-- So the EC2Instance we're creating has two properties, the "ImageId" and the "InstanceType", so we are familiar with this. And there are no Conditions attached to the resource here.
+
+-- But we have a "MountPoint", which is an EC2 VolumeAttachment, to attach an EBS volume onto our EC2Instance.
+
+-- So only in "prod" will we have this VolumeAttachment
+
+-- And if you look at the NewVolume itself, well, it is an EC2 Volume, again that is being conditioned by this Condition named "CreateProdResources".
+
+-- we can see that we use Conditions on resources, but also on outputs.
+
+
+
+-- deploy this stack in console with test environment, it will creta eone ec2 as a part of templte 
+
+-- now update and change to prod , we have two new resources , the "MountPoint" and the "NewVolume".
+
+-- So the NewVolume has been created. So this is an EBS Volume, and it is right here, of size 1GB, and it is in use, and it's actually already attached to my EC2Instance.
+
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION RULES =========================================================
+
+
+
+
+-- rules are very exciting, because parameters are quite limited in their ability to be validated.
+
+-- parameters are quite limited in their ability to be validated. So we can have some constraints within a single parameter. For example, checking its type, the Min/MaxLength, the Min/MaxValue, AllowedValues or AllowedPatterns.
+
+-- But if we want to do cross validation of all parameters we can use rules.
+
+-- rules are used to perform the parameter validation based on the values of other parameters (cross-parameter validation)
+
+-- For example, we can ensure that all subnets selected within the parameters are within the same VPC,
+
+-- This is something that we cannot do with just parameters alone, we need to use rules for that.
+
+-- So the way it works that's we define our templates our parameters, and our rules.
+
+-- We will create an update in CloudFormation. That CloudFormation will perform a check of the parameters against the rules.And if it's not valid, then CloudFormation will not proceed with the updates or the creates, it will be failed.
+
+-- So defining a rule is not really easy 
+
+-- CloudFormation Rule consists of an optional rule condition and one or more assertion
+
+
+
+
+EG:
+
+
+
+
+Rules:
+  ProdInstanceType:
+    RuleCondition: !Equals 
+      - !Ref Environment
+      - prod
+    Assertions:
+      - Assert:
+          !Equals [t2.small, !Ref InstanceType]
+        AssertDescription: 'For a production environment, the instance type must be t2.small'
+
+  DevInstanceType:
+    RuleCondition: !Equals 
+      - !Ref Environment
+      - dev
+    Assertions:
+      # Assert with Or
+      # - Assert:
+      #     'Fn::Or':
+      #       - !Equals [!Ref InstanceType, t2.nano]
+      #       - !Equals [!Ref InstanceType, t2.micro]
+      # Assert with Contains
+      - Assert:
+          'Fn::Contains':
+            - - t2.nano
+              - t2.micro
+            - !Ref InstanceType
+        AssertDescription: 'For a development environment, the instance type must be t2.nano or t2.micro'
+  
+
+
+
+
+
+1 So each rule consists of a condition. And so to determine whether or not the rule takes effect or assertion, so there's only one per rule.
+
+2 we have an assertion. So what is this rule going to assert?
+
+     - it describes what values are Allowed for a particular parameter . Can contain one or more AssertDescription
+
+
+-- If you do not define a rule condition then the rule's assertion will take effect with every single create and update operation.     
+
+
+
+
+
+--------------------------- Rules Example 
+
+
+
+-- So for example, if you have an application of a balancer and you configure an SSL listener, so you want to make sure that you have HTTPS outside of your ALB, then you need to provide us ACM certificate.
+
+
+-- supported functions
+
+
+Fn::And
+
+Fn::Contains
+
+Fn::EachMemberEquals
+
+Fn::EachMemberIn
+
+Fn::Equals
+
+Fn::If
+
+Fn::Not
+
+Fn::Or
+
+Fn::RefAll
+
+Fn::ValueOf
+
+Fn::ValueOfAll
+
+
+
+
+
+
+
+------------------------------------------- Rules Hands On
+
+
+
+-- we're going to create a CloudFormation template that will check the value of an instance type parameter and also the value of the environment parameter and make sure they match together.
+
+-- create one yaml file 
+
+
+
+
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.small
+    AllowedValues:
+      - t2.nano
+      - t2.micro
+      - t2.small
+
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+      
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Rules:
+  ProdInstanceType:
+    RuleCondition: !Equals 
+      - !Ref Environment
+      - prod
+    Assertions:
+      - Assert:
+          !Equals [t2.small, !Ref InstanceType]
+        AssertDescription: 'For a production environment, the instance type must be t2.small'
+
+  DevInstanceType:
+    RuleCondition: !Equals 
+      - !Ref Environment
+      - dev
+    Assertions:
+      # Assert with Or
+      # - Assert:
+      #     'Fn::Or':
+      #       - !Equals [!Ref InstanceType, t2.nano]
+      #       - !Equals [!Ref InstanceType, t2.micro]
+      # Assert with Contains
+      - Assert:
+          'Fn::Contains':
+            - - t2.nano
+              - t2.micro
+            - !Ref InstanceType
+        AssertDescription: 'For a development environment, the instance type must be t2.nano or t2.micro'
+  
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref ImageId
+
+
+
+
+
+
+-- here , we have three parameters. 
+
+      One is instance type, 
+      
+      the other one is environment, 
+      
+      and finally, image ID.
+
+
+-- So the interesting parts goes in the instance types and the environments.      
+
+-- So if we look at instance type, by default, it is a t2 small, and the allowed value is t2 nano, t2 micro and t2 small.
+
+-- And then the environment by default is dev, but we will have value, dev and prod.
+
+
+IMP :
+
+
+-- so the logic is that if we are in dev, we want to allow a t2 nano or a t2 micro. And if we are in prod, we only want to allow a t2 small.
+
+-- But this is not something we can do just with parameters.
+
+-- So we have to go and use a rule.
+
+-- So let's create a rule called ProdInstanceType,and the rule has a rule condition to be evaluated or not.
+
+-- So this ProdInstanceType is going to be evaluated only when the environment is equal to prod.
+
+-- this rule is only checking the ProdInstanceType, so only do it when the environment is prod.
+
+-- there's only one assertion, because there's only one minus sign here.(yaml code) And so it's going to assert one thing
+
+-- so it's going to assert one thing which is that t2 small is equal to the instance type.
+
+-- Now similarly, we have a rule for dev instance type.
+
+-- So we're only having this rule run when the environment is dev. And then for the assertions, there are two ways of writing it.
+
+-- So either we use an or function, or we use a contains function.But they both have the same
+
+-- which is saying, hey, the instance type must be either equal to t2 nano or to t2 micro.
+
+-- deploy stack --> choose dev ---> choose t2.small --> create stack , u will get an error cozz' For development environments, the instance type must be t2 nano or t2 micro,as per rules 
+
+-- for same prod also it must allow t2.small only 
+
+-- now deploy stack with dev --> t2.micro it will create successfully
+
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION METADATA =========================================================
+
+
+
+-- So metadata is just optional and it's for you to include arbitrary YAML to provide details about the templates or resources.
+
+-- The metadata doesn't have an impact around how your CloudFormation template works so far,
+
+
+
+
+---------------------------------- special metadata keys
+
+
+
+-- So we have special metadata keys, but some of them are used in AWS and have a special meaning.
+
+1 AWS:CloudFormation:Interface :
+
+      - which allows you to group and order the input parameters when they're displayed in the AWS console.
+
+2 AWS:CloudFormation:Authentication:
+
+      - used to specify Authentication credentials for files or source that you specify in  AWS:CloudFormation:Init.
+
+3 AWS:CloudFormation:Init:
+
+      - Define configuration Tasks for cfn-init , it is the most powerful usage of the metadata
+
+
+
+
+
+
+-------------------------------------- AWS:CloudFormation:Interface
+
+
+
+-- this allows you to define grouping and ordering of input parameters, when they are displayed in the AWS Console.
+
+-- This is meant when user must input template parameters manually
+
+-- You provide them with grouping and sorting and then they're allowed to put parameters efficiently.
+
+-- For example, if you have a bunch of parameters related to EC2 instances, may be we group them together.(group all the ec2 related parameter together)
+
+
+
+-- create one yaml file 
+
+
+
+
+
+Parameters:
+  InstanceType:
+    Description: EC2 instance type.
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+    - t2.micro
+    - t2.small
+    - t2.medium
+    - m3.medium
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+  SubnetID:
+    Description: Subnet ID
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroupID:
+    Description: Security Group
+    Type: AWS::EC2::SecurityGroup::Id
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-0742b4e673072066f
+      InstanceType: !Ref InstanceType
+      SecurityGroups:
+        - !Ref SecurityGroupID
+      SubnetId: !Ref SubnetID
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - SubnetID
+          - SecurityGroupID
+      - Label:
+          default: "Amazon EC2 Configuration"
+        Parameters:
+          - InstanceType
+    ParameterLabels:
+      SubnetID:
+        default: "Which subnet should this be deployed to?"
+
+
+
+
+
+-- So we have a few parameters. We have the InstanceType, which is going to allow us to select an EC2 instance type.
+
+-- We have the SubnetID to choose the EC2 Subnet ID, as well as the SecurityGroupID for our EC2 instance.
+
+-- So we defined some metadata with some CloudFormation::Interface and we are defining ParameterGroups.
+
+        - ParameterGroup is a property of the AWS::CloudFormation::Interface resource that defines a parameter group and the parameters to include in the group.
+
+        - parameter Labels are friendly names that the AWS CloudFormation console displays instead of the logical IDs.
+
+
+-- So the first one is going to be called Network Configuration and within its we are defining a few parameters which is SubnetID and SecurityGroupID.        
+
+-- deploy the stack and observe the User Interface
+
+-- for Subnet ID, as you can see, there is a question, a new label, which is, Which subnet should this be deployed to? which is a much nicer way of defining your parameters and so on.
+
+-- So this is just to enhance the UI in case you expect users to use the Console a lot to deploy your CloudFormation templates and using this you can make them more user-friendly.
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION CFN INIT AND USERDATA =========================================================
+
+
+
+------------------------------------------ So what is that?
+
+
+
+-- Well, many of the CloudFormation templates we have so far are about provisioning computing resources in your cloud. That means EC2 instances, or auto-scaling groups, et cetera, et cetera,
+
+-- you just don't want to just provision the EC2 instances. Sometimes you want these instances to be self configured so that they can perform the job they're supposed to do.
+
+-- so you can fully automate your EC2 instances fleet state with CloudFormation init.
+
+
+
+
+------------------------------------------ User Data in EC2 for CloudFormation
+
+
+• We can have user data at EC2 instance launch through the console
+
+• Let’s learn how to write the same EC2 user-data script in our CloudFormation template
+
+• The important thing to pass is the entire script through the function Fn::Base64
+
+• Good to know, user data script log is in /var/log/cloud-init-output.log
+
+
+
+
+------------------------------------------ User Data in EC2 for CloudFormation Hands On
+
+
+
+create one yaml file 
+
+
+
+
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 key pair for SSH access to the EC2 instance.
+    Type: AWS::EC2::KeyPair::KeyName
+
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  WebServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref WebServerSecurityGroup
+      UserData:
+        Fn::Base64: |
+           #!/bin/bash
+           yum update -y
+           amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+           yum install -y httpd mariadb-server
+           systemctl start httpd
+           systemctl enable httpd
+           usermod -a -G apache ec2-user
+           chown -R ec2-user:apache /var/www
+           chmod 2775 /var/www
+           find /var/www -type d -exec sudo chmod 2775 {} \;
+           find /var/www -type f -exec sudo chmod 0664 {} \;
+           echo "<?php phpinfo(); ?>" > /var/www/html/phpinfo.php
+
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enable HTTP access via port 80 + SSH access"
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 80
+        IpProtocol: tcp
+        ToPort: 80
+      - CidrIp: !Ref SSHLocation
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+
+
+
+
+-- So we have key names.This is to provide an SSH key is a certification key which is going to provide a CIDR to allow SSH into the instance 
+
+-- image ID to get the latest AMI directly from the parameter storage of AWS.
+
+-- the important part is user data. So you set it out. It needs to have a base 64 inputs. So we use this function FN based 64 and then this vertical pipe is not an error. It is actually needed.
+
+-- what this vertical pipe is doing is saying that everything underneath is going to be a multiline string. So this represents a multiline string.
+
+-- deploy the stack , This is going to create one as a site security group, and then this is going to create a, these to instance.
+
+-- regardless if the script works or not we are still going to get create successful for user data.
+
+
+IMP :
+
+-- I copy the IP address and go to it, we see the site cannot be reached. So the EC2UserData that script has not finished running yet the CloudFormation templates give us a create complete.
+
+-- connect to your instance --> sudo su --> cat /var/log/cloud-init-output.log
+
+-- this file represents all the outputs of your EC2UserData scripts.
+
+-- So as we can see in here, everything that was passed as commands are being run in here and you can see the outputs of the EC2UserData scripts, which is quite easy quite easy if you are doing some debugging.
+
+
+
+
+
+
+------------------------------------------ The Problems with EC2 User Data
+
+
+• What if we want to have a very large instance configuration?
+ 
+       - it may not fit in the EC2 user data because you're limited in terms of size to be passed to the scripts.
+
+• What if we want to evolve the state of the EC2 instance without terminating it and creating a new one?
+
+• How do we make EC2 user-data more readable?
+
+• How do we know or signal that our EC2 user-data script completed successfully?
+
+
+
+---- All these things are addressed by CloudFormation Init.
+
+• Enter CloudFormation Helper Scripts!
+
+     • Python scripts, that come directly on Amazon Linux AMIs, or can be installed using yum or dnf on non-Amazon Linux AMIs
+
+     • cfn-init, cfn-signal, cfn-get-metadata, cfn-hup
+
+
+-- cfn-init :
+
+           - it's used to retrieve and interpret the resource metadata, installing packages, creating files, and starting services.
+
+-- cfn-signal :
+
+           - which is a wrapper script to signal with a CreationPolicy or a WaitCondition. That means that the EC2 instance will be able to say, to CloudFormation back whether or not it has been successfully created or not.
+
+
+-- cfn-get-metadata :
+
+           - is a wrapper script to make it easy to retrieve all metadata defined for a resource or a specific path.
+
+
+-- cfn-hup:
+
+          - a daemon to check for updates to the metadata section in your CloudFormation templates and execute custom hooks when the changes are detected.
+
+
+-- Usal Flow :    cfn-init ,then cfn-signal then optionally cfn-hup
+
+
+
+
+
+
+
+
+------------------------------------------ AWS::CloudFormation::Init 
+
+
+
