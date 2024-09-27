@@ -2357,4 +2357,382 @@ IMP :
 ------------------------------------------ AWS::CloudFormation::Init 
 
 
+• A "config" contains the following and is executed in that order
+
+     • Packages: used to download and install pre-packaged apps and components on Linux/Windows (ex. MySQL, PHP,etc...)
+     
+     • Groups: define user groups
+
+     • Users: define users, and which group they belong to
+
+     • Sources: download files and archives and place them on the EC2 instance
+
+     • Files: create files on the EC2 instance, using inline or can be pulled from a URL
+
+     • Commands: run a series of commands
+
+     • Services: launch a list of sysvinit
+
+
+
+
+
+
+
+EG :
+
+
+
+  WebServerHost:
+    Type: AWS::EC2::Instance
+    Metadata:
+      Comment: Install a simple PHP application
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              httpd: []
+              php: []
+          groups:
+            apache: {}
+          users:
+            "apache":
+              groups:
+                - "apache"
+          sources:
+            "/home/ec2-user/aws-cli": "https://github.com/aws/aws-cli/tarball/master"
+          files:
+            "/tmp/cwlogs/apacheaccess.conf":
+              content: !Sub |
+                [general]
+                state_file= /var/awslogs/agent-state
+                [/var/log/httpd/access_log]
+                file = /var/log/httpd/access_log
+                log_group_name = ${AWS::StackName}
+                log_stream_name = {instance_id}/apache.log
+                datetime_format = %d/%b/%Y:%H:%M:%S
+              mode: '000400'
+              owner: apache
+              group: apache
+            "/var/www/html/index.php":
+              content: !Sub |
+                <?php
+                echo '<h1>AWS CloudFormation sample PHP application for ${AWS::StackName}</h1>';
+                ?>
+              mode: '000644'
+              owner: apache
+              group: apache
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: "000400"
+              owner: "root"
+              group: "root"
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.WebServerHost.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource WebServerHost --region ${AWS::Region}
+              mode: "000400"
+              owner: "root"
+              group: "root"
+            # Fetch a webpage from a private S3 bucket
+            "/var/www/html/webpage.html":
+              source: !Sub "https://${MyS3BucketName}.s3.${AWS::Region}.amazonaws.com/webpage.html"
+              mode: '000644'
+              owner: apache
+              group: apache
+              authentication: S3AccessCreds
+          commands:
+            test:
+              command: "echo \"$MAGIC\" > test.txt"
+              env:
+                MAGIC: "I come from the environment!"
+              cwd: "~"
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              postfix:
+                enabled: 'false'
+                ensureRunning: 'false'
+              cfn-hup:
+                enable: 'true'
+                ensureRunning: 'true'
+                files:
+                  - "/etc/cfn/cfn-hup.conf"
+                  - "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+
+
+
+
+
+1 packages:
+
+    - So packages is very handy. It allows you to install packages from the following repositories. So it could be apt, msi, python, rpm, rubygems, and yum.
+
+    - the packages are processed in the following order, rpm, then yum/apt, and then rubygems and python.
+
+    - you can specify a version, or no versions,(empty Array means Latest) if you want to have the latest package installed on your EC2 instance.
+
+
+
+2 Group And Users :
+
+     - So if you want to have multiple users and groups with an optional group ID, within your EC2 instance, you can do the following.
+
+
+3 Sources:
+
+     - So using Sources, we can download whole compress archives from the web and unpack them on the EC2 instance directly.
+
+     - it's very handy if you have a set of standardized scripts for your EC2 instances that you store in Amazon S3
+
+     -  for example, or if you want to download an entire GitHub project directly onto your EC2 instance.
+
+     - So the supported formats for Sources is tar, tar + gzip, tar + bz2, or zip.
+
+
+4 Files:
+
+     - Files is the main advantage to use CloudFormation init.
+
+     - So files are very powerful because they have, they give you full control over any content you want within your CloudFormation template in your EC2 Instance.
+
+     - they can come in two flavors. Either you pull a file from a specific URL or we can write a file inline form within your template.
+
+     - the additional attributes you're getting for files
+
+          - Source : URL to load file 
+
+          - authentication : name of authentication method to use (used with aws::cloudformation::authentication) - eg: for files that are protected by users/pass
+
+EG :
+
+
+
+  files:
+            "/tmp/cwlogs/apacheaccess.conf":
+              content: !Sub |
+                [general]
+                state_file= /var/awslogs/agent-state
+                [/var/log/httpd/access_log]
+                file = /var/log/httpd/access_log
+                log_group_name = ${AWS::StackName}
+                log_stream_name = {instance_id}/apache.log
+                datetime_format = %d/%b/%Y:%H:%M:%S
+              mode: '000400'
+              owner: apache
+              group: apache
+            "/var/www/html/index.php":
+              content: !Sub |
+                <?php
+                echo '<h1>AWS CloudFormation sample PHP application for ${AWS::StackName}</h1>';
+                ?>
+              mode: '000644'
+              owner: apache
+              group: apache
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+              mode: "000400"
+              owner: "root"
+              group: "root"
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.WebServerHost.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource WebServerHost --region ${AWS::Region}
+              mode: "000400"
+              owner: "root"
+              group: "root"
+            # Fetch a webpage from a private S3 bucket
+            "/var/www/html/webpage.html":
+              source: !Sub "https://${MyS3BucketName}.s3.${AWS::Region}.amazonaws.com/webpage.html"
+              mode: '000644'
+              owner: apache
+              group: apache
+              authentication: S3AccessCreds
+         
+
+
+
+-- we have !Sub  function it's going to substitute some variables within my texts right here.
+
+-- for eg ${AWS::StackName} So this is going to be found by the substitutes function because it started with a dollar sign and an open brackets and then is going to replace the log group name by the pseudo variable, AWS StackName .
+
+
+
+
+
+
+
+5 commands : 
+
+     - you can run commands one at a time in the alphabetical order in which they're declared in your CloudFormation templates.
+
+     - you can set a directory from which a command is run as well as environment variables associated with that command. So you're really free to customize your command.
+
+     - For example, you can check the existence of a file and if it doesn't exist, then run the download command.
+
+     - we are using the echo command only if a file doesn't exist.
+
+     
+
+
+
+
+
+
+
+
+------------------------------------------------ AWS:CloudFormation:Authentication:
+
+
+-- you can use with files and combining with authentication to retrieve files or sources actually that are going to be more secure.
+
+-- used to specify authentication credentials for files or sources in AWS:CloudFormation:Init
+
+-- 2 types :
+
+      - Basic : used when the source is URL
+
+      - S3 : used when the source is S3
+
+
+EG 1: EC2 web server authentication
+
+
+
+
+
+-- This template snippet shows how to get a file from a private S3 bucket within an EC2 instance. The credentials used for authentication are defined in the AWS::CloudFormation::Authentication resource, and referenced by the AWS::CloudFormation::Init resource in the files section.
+
+
+
+
+WebServer: 
+  Type: AWS::EC2::Instance
+  DependsOn: BucketPolicy
+  Metadata: 
+    AWS::CloudFormation::Init: 
+      config: 
+        packages: 
+          yum: 
+            httpd: []
+        files: 
+          /var/www/html/index.html: 
+            source: !Join
+              - ''
+              - - 'http://s3.amazonaws.com/'
+                - !Ref BucketName
+                - '/index.html'
+            mode: '000400'
+            owner: apache
+            group: apache
+            authentication: S3AccessCreds
+        services: 
+          sysvinit: 
+            httpd: 
+              enabled: 'true'
+              ensureRunning: 'true'
+    AWS::CloudFormation::Authentication: 
+      S3AccessCreds: 
+        type: S3
+        accessKeyId: !Ref AccessKeyID
+        secretKey: !Ref SecretAccessKey
+  Properties: 
+  EC2 Resource Properties ...
+
+
+
+
+
+EG : 2 Specifying both basic and S3 authentication
+
+
+
+
+-- The following example template snippet includes both basic and S3 authentication types.
+
+AWS::CloudFormation::Authentication: 
+  testBasic: 
+    type: basic
+    username: !Ref UserName
+    password: !Ref Password
+    uris: 
+      - 'example.com/test'
+  testS3: 
+    type: S3
+    accessKeyId: !Ref AccessKeyID
+    secretKey: !Ref SecretAccessKey
+    buckets: 
+      - !Sub ${BucketName}
+
+
+
+
+EG : 3  IAM roles
+
+
+The following example shows how to use IAM roles:
+
+     - myRole is an AWS::IAM::Role resource.
+
+     - The Amazon EC2 instance that runs cfn-init is associated with myRole through an instance profile.
+
+     - The example specifies the authentication by using the buckets property, like in Amazon S3 authentication. You can also specify authentication by name.
+
+
+
+
+AWS::CloudFormation::Authentication: 
+  rolebased: 
+    type: S3
+    buckets: 
+      - !Sub ${BucketName}
+    roleName: !Ref myRole
+
+
+
+
+
+
+--------------------------------------------- Hands On
+
+
+-- go to s3 and create s3 bucket 
+
+-- create one html page like webpage.html 
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Hello, I'm a Web Page :). I have been downloaded from S3 bucket.</h1>
+</body>
+</html>
+
+
+
+-- So this is the HTML page that our EC2 instance will access and download from.
+
+
+
+
+
 
