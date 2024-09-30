@@ -6536,3 +6536,139 @@ Resources:
 -- So It is going to wait for a signal coming from the EC2 to instance they should take about 10 seconds after it has bootstrapped.
 
 -- it shows you how WaitConditions work. that's it 
+
+
+
+
+
+
+
+
+
+------------------------------------------------ CloudFormation – Dynamic References
+
+
+
+
+-- so far all the stuff we have within our CloudFormation templates comes from the CloudFormation templates,
+
+-- but it is possible for you to reference external values that are stored in the SSM parameter store and secrets manager, within direct clear your CloudFormation templates,
+
+• Reference external values stored in Systems Manager Parameter Store and Secrets Manager within CloudFormation templates
+
+-- so this is different from using an SSM parameter store in the parameters, because now these references can be done from within your templates, so at runtime CloudFormation will retrieve the templates,
+
+• CloudFormation retrieves the value of the specified reference during create/update/delete operations
+
+• For example: retrieve RDS DB Instance master password from Secrets Manager
+
+• Supports
+
+      • ssm – for plaintext values stored in SSM Parameter Store
+      • ssm-secure – for secure strings stored in SSM Parameter Store
+      • secretsmanager – for secret values stored in Secrets Manager
+
+
+‘{{resolve:service-name:reference-key}}’     -- template 
+
+
+-- upto 60 dynamic references in a template 
+
+
+-- so you can retrieve a string or a string list from the SSM parameter store, and if you don't specify a version, then CloudFormation we'll use the latest version of that parameter,
+
+
+IMP:
+
+-- it does not support retrieving public SSM parameters such as the Amazon Linux 2 AMI,
+
+
+
+
+------------------------------------------------ CloudFormation – Dynamic References for ssm
+
+
+EG :
+
+
+Resources:
+  MyS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties: 
+       AccessControl:‘{{resolve:ssm:s3AccessControl:2}}’
+
+
+
+-- as you can see that's very very different from when we had parameters,
+
+-- so parameters were defined outside of resources and then they were referenced from within the resources,
+
+-- but here we can use this dynamic parameters from within the resources or other places in your templates.
+
+
+
+
+
+
+------------------------------------------------ CloudFormation – Dynamic References for SSM Secure
+
+{{resolve:ssm-secure:parameter-name:version}}
+
+
+
+EG:
+
+
+  MyIAMUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: 'MyUserName'
+      LoginProfile:
+        Password: '{{resolve:ssm-secure:IAMUserPassword:10}}'
+
+
+
+-- stored in secureString form , so it could be passwords, license keys,etc ...
+
+-- CloudFormation will never store the actual parameter value, so this makes it a very secure solution,
+
+-- Now, these secrets can not be used with every single kind of resources,
+
+    https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/dynamic-references.html#template-parameters-dynamic-patterns-resources
+
+
+
+
+
+
+
+------------------------------------------------ CloudFormation – Dynamic References for Secrets Manager
+
+
+
+{{resolve:secretsmanager:secret-id:secret-string:json-key:version-stage:version-id}}
+
+
+
+
+  MyRDSInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBName: MyRDSInstance
+      AllocatedStorage: '20'
+      DBInstanceClass: db.t2.micro
+      Engine: mysql
+      MasterUsername: '{{resolve:secretsmanager:MyRDSSecret:SecretString:username}}'
+      MasterUserPassword: '{{resolve:secretsmanager:MyRDSSecret:SecretString:password}}'
+
+
+
+
+
+-- it will retrieve the entire secrets or secret value stored in the secrets manager service
+
+-- for example, database credentials, passwords, third party API keys, 
+
+-- if you want to update your secrets, you must first update the resource containing the secretsmanager dynamic reference, using one of the resource properties,
+
+-- 
