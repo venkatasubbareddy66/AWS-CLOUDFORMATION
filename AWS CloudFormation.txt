@@ -4872,5 +4872,914 @@ https://eu-central-1.console.aws.amazon.com/cloudformation/home?region=eu-centra
 
 
 
--- change keypair of urs and copy this link and paste in browser u will get CF console for wuick deployment
+-- change keypair of urs and copy this link and paste in browser u will get CF console for Quick deployment
 
+
+
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION Continuous Delivery ========================================================
+
+
+
+
+
+-- So let's see how we can do continuous delivery with CodePipeline and CloudFormation.
+
+-- So we use CodePipeline which is a managed service to do continuous delivery
+
+-- then CodePipeline is a way to deploy a CloudFormation stacks for you.
+
+-- The idea is that you want to rapidly and reliably make changes to your AWS infrastructure. 
+
+-- And then you can combine CodePipeline with other tools to automatically build  and test changes to your CloudFormation templates before promoting them into production stacks.
+
+-- For Example :
+
+        - So we'll create a workflow that automatically builds a test stack.When we submit a CloudFormation templates into a code repository, and 
+        
+        - then after CloudFormation has built the test stack then we can test it and then decide maybe with a manual approval to push changes to the production stack.
+
+
+-- WorkFLow 
+
+       - We're going to have a user push a template and some configuration files into an S3 buckets.
+
+       - This is going to trigger a code pipeline and then the pipeline will create a test stack in CloudFormation, which we create a test stack in which we have to do some testing and then manually approve.
+
+       - When the user does approve the test stack then CloudFormation will go ahead and create a production stack and as well as deleting the test stack.
+
+
+-- so this is the state we want to get to to have some automated release of our CloudFormation templates, and you can take this at home and then do it within your company.
+
+
+
+
+
+
+
+
+------------------------------------------------- Hands ON
+
+
+
+
+--create one  word-press-single-instance.yaml 
+
+
+
+
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation Sample Template WordPress_Single_Instance: WordPress is web
+  software you can use to create a beautiful website or blog. This template
+  installs WordPress with a local MySQL database for storage. It demonstrates
+  using the AWS CloudFormation bootstrap scripts to deploy WordPress.
+  **WARNING** This template creates an Amazon EC2 instance. You will be billed
+  for the AWS resources used if you create a stack from this template.
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - hs1.8xlarge
+      - cr1.8xlarge
+      - cc2.8xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  DBName:
+    Default: wordpressdb
+    Description: The WordPress database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBUser:
+    NoEcho: 'true'
+    Description: The WordPress database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBPassword:
+    NoEcho: 'true'
+    Description: The WordPress database admin account password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+  DBRootPassword:
+    NoEcho: 'true'
+    Description: MySQL root password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+Mappings:
+  AWSInstanceType2Arch:
+    t1.micro:
+      Arch: HVM64
+    t2.nano:
+      Arch: HVM64
+    t2.micro:
+      Arch: HVM64
+    t2.small:
+      Arch: HVM64
+    t2.medium:
+      Arch: HVM64
+    t2.large:
+      Arch: HVM64
+    m1.small:
+      Arch: HVM64
+    m1.medium:
+      Arch: HVM64
+    m1.large:
+      Arch: HVM64
+    m1.xlarge:
+      Arch: HVM64
+    m2.xlarge:
+      Arch: HVM64
+    m2.2xlarge:
+      Arch: HVM64
+    m2.4xlarge:
+      Arch: HVM64
+    m3.medium:
+      Arch: HVM64
+    m3.large:
+      Arch: HVM64
+    m3.xlarge:
+      Arch: HVM64
+    m3.2xlarge:
+      Arch: HVM64
+    m4.large:
+      Arch: HVM64
+    m4.xlarge:
+      Arch: HVM64
+    m4.2xlarge:
+      Arch: HVM64
+    m4.4xlarge:
+      Arch: HVM64
+    m4.10xlarge:
+      Arch: HVM64
+    c1.medium:
+      Arch: HVM64
+    c1.xlarge:
+      Arch: HVM64
+    c3.large:
+      Arch: HVM64
+    c3.xlarge:
+      Arch: HVM64
+    c3.2xlarge:
+      Arch: HVM64
+    c3.4xlarge:
+      Arch: HVM64
+    c3.8xlarge:
+      Arch: HVM64
+    c4.large:
+      Arch: HVM64
+    c4.xlarge:
+      Arch: HVM64
+    c4.2xlarge:
+      Arch: HVM64
+    c4.4xlarge:
+      Arch: HVM64
+    c4.8xlarge:
+      Arch: HVM64
+    g2.2xlarge:
+      Arch: HVMG2
+    g2.8xlarge:
+      Arch: HVMG2
+    r3.large:
+      Arch: HVM64
+    r3.xlarge:
+      Arch: HVM64
+    r3.2xlarge:
+      Arch: HVM64
+    r3.4xlarge:
+      Arch: HVM64
+    r3.8xlarge:
+      Arch: HVM64
+    i2.xlarge:
+      Arch: HVM64
+    i2.2xlarge:
+      Arch: HVM64
+    i2.4xlarge:
+      Arch: HVM64
+    i2.8xlarge:
+      Arch: HVM64
+    d2.xlarge:
+      Arch: HVM64
+    d2.2xlarge:
+      Arch: HVM64
+    d2.4xlarge:
+      Arch: HVM64
+    d2.8xlarge:
+      Arch: HVM64
+    hi1.4xlarge:
+      Arch: HVM64
+    hs1.8xlarge:
+      Arch: HVM64
+    cr1.8xlarge:
+      Arch: HVM64
+    cc2.8xlarge:
+      Arch: HVM64
+  AWSRegionArch2AMI:
+    af-south-1:
+      HVM64: ami-064cc455f8a1ef504
+      HVMG2: NOT_SUPPORTED
+    ap-east-1:
+      HVM64: ami-f85b1989
+      HVMG2: NOT_SUPPORTED
+    ap-northeast-1:
+      HVM64: ami-0b2c2a754d5b4da22
+      HVMG2: ami-09d0e0e099ecabba2
+    ap-northeast-2:
+      HVM64: ami-0493ab99920f410fc
+      HVMG2: NOT_SUPPORTED
+    ap-northeast-3:
+      HVM64: ami-01344f6f63a4decc1
+      HVMG2: NOT_SUPPORTED
+    ap-south-1:
+      HVM64: ami-03cfb5e1fb4fac428
+      HVMG2: ami-0244c1d42815af84a
+    ap-southeast-1:
+      HVM64: ami-0ba35dc9caf73d1c7
+      HVMG2: ami-0e46ce0d6a87dc979
+    ap-southeast-2:
+      HVM64: ami-0ae99b503e8694028
+      HVMG2: ami-0c0ab057a101d8ff2
+    ca-central-1:
+      HVM64: ami-0803e21a2ec22f953
+      HVMG2: NOT_SUPPORTED
+    cn-north-1:
+      HVM64: ami-07a3f215cc90c889c
+      HVMG2: NOT_SUPPORTED
+    cn-northwest-1:
+      HVM64: ami-0a3b3b10f714a0ff4
+      HVMG2: NOT_SUPPORTED
+    eu-central-1:
+      HVM64: ami-0474863011a7d1541
+      HVMG2: ami-0aa1822e3eb913a11
+    eu-north-1:
+      HVM64: ami-0de4b8910494dba0f
+      HVMG2: ami-32d55b4c
+    eu-south-1:
+      HVM64: ami-08427144fe9ebdef6
+      HVMG2: NOT_SUPPORTED
+    eu-west-1:
+      HVM64: ami-015232c01a82b847b
+      HVMG2: ami-0d5299b1c6112c3c7
+    eu-west-2:
+      HVM64: ami-0765d48d7e15beb93
+      HVMG2: NOT_SUPPORTED
+    eu-west-3:
+      HVM64: ami-0caf07637eda19d9c
+      HVMG2: NOT_SUPPORTED
+    me-south-1:
+      HVM64: ami-0744743d80915b497
+      HVMG2: NOT_SUPPORTED
+    sa-east-1:
+      HVM64: ami-0a52e8a6018e92bb0
+      HVMG2: NOT_SUPPORTED
+    us-east-1:
+      HVM64: ami-032930428bf1abbff
+      HVMG2: ami-0aeb704d503081ea6
+    us-east-2:
+      HVM64: ami-027cab9a7bf0155df
+      HVMG2: NOT_SUPPORTED
+    us-west-1:
+      HVM64: ami-088c153f74339f34c
+      HVMG2: ami-0a7fc72dc0e51aa77
+    us-west-2:
+      HVM64: ami-01fee56b22f308154
+      HVMG2: ami-0fe84a5b4563d8f27
+Resources:
+  WebServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: >-
+        Enable HTTP access via port 80 locked down to the load balancer + SSH
+        access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+  WebServer:
+    Type: 'AWS::EC2::Instance'
+    Metadata:
+      'AWS::CloudFormation::Init':
+        configSets:
+          wordpress_install:
+            - install_cfn
+            - install_wordpress
+            - configure_wordpress
+        install_cfn:
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [main]
+                  - stack=
+                  - !Ref 'AWS::StackId'
+                  - |+
+
+                  - region=
+                  - !Ref 'AWS::Region'
+                  - |+
+
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Join 
+                - ''
+                - - |
+                    [cfn-auto-reloader-hook]
+                  - |
+                    triggers=post.update
+                  - |
+                    path=Resources.WebServer.Metadata.AWS::CloudFormation::Init
+                  - 'action=/opt/aws/bin/cfn-init -v '
+                  - '         --stack '
+                  - !Ref 'AWS::StackName'
+                  - '         --resource WebServer '
+                  - '         --configsets wordpress_install '
+                  - '         --region '
+                  - !Ref 'AWS::Region'
+                  - |+
+
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        install_wordpress:
+          packages:
+            yum:
+              php73: []
+              php73-mysqlnd: []
+              mysql57: []
+              mysql57-server: []
+              mysql57-devel: []
+              mysql57-libs: []
+              httpd24: []
+          sources:
+            /var/www/html: 'http://wordpress.org/latest.tar.gz'
+          files:
+            /tmp/setup.mysql:
+              content: !Join 
+                - ''
+                - - 'CREATE DATABASE '
+                  - !Ref DBName
+                  - |
+                    ;
+                  - CREATE USER '
+                  - !Ref DBUser
+                  - '''@''localhost'' IDENTIFIED BY '''
+                  - !Ref DBPassword
+                  - |
+                    ';
+                  - 'GRANT ALL ON '
+                  - !Ref DBName
+                  - .* TO '
+                  - !Ref DBUser
+                  - |
+                    '@'localhost';
+                  - |
+                    FLUSH PRIVILEGES;
+              mode: '000400'
+              owner: root
+              group: root
+            /tmp/create-wp-config:
+              content: !Join 
+                - ''
+                - - |
+                    #!/bin/bash -xe
+                  - >
+                    cp /var/www/html/wordpress/wp-config-sample.php
+                    /var/www/html/wordpress/wp-config.php
+                  - sed -i "s/'database_name_here'/'
+                  - !Ref DBName
+                  - |
+                    '/g" wp-config.php
+                  - sed -i "s/'username_here'/'
+                  - !Ref DBUser
+                  - |
+                    '/g" wp-config.php
+                  - sed -i "s/'password_here'/'
+                  - !Ref DBPassword
+                  - |
+                    '/g" wp-config.php
+              mode: '000500'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: 'true'
+                ensureRunning: 'true'
+              mysqld:
+                enabled: 'true'
+                ensureRunning: 'true'
+        configure_wordpress:
+          commands:
+            01_set_mysql_root_password:
+              command: !Join 
+                - ''
+                - - mysqladmin -u root password '
+                  - !Ref DBRootPassword
+                  - ''''
+              test: !Join 
+                - ''
+                - - '$(mysql '
+                  - !Ref DBName
+                  - ' -u root --password='''
+                  - !Ref DBRootPassword
+                  - ''' >/dev/null 2>&1 </dev/null); (( $? != 0 ))'
+            02_create_database:
+              command: !Join 
+                - ''
+                - - mysql -u root --password='
+                  - !Ref DBRootPassword
+                  - ''' < /tmp/setup.mysql'
+              test: !Join 
+                - ''
+                - - '$(mysql '
+                  - !Ref DBName
+                  - ' -u root --password='''
+                  - !Ref DBRootPassword
+                  - ''' >/dev/null 2>&1 </dev/null); (( $? != 0 ))'
+            03_configure_wordpress:
+              command: /tmp/create-wp-config
+              cwd: /var/www/html/wordpress
+    Properties:
+      ImageId: !FindInMap 
+        - AWSRegionArch2AMI
+        - !Ref 'AWS::Region'
+        - !FindInMap 
+          - AWSInstanceType2Arch
+          - !Ref InstanceType
+          - Arch
+      InstanceType: !Ref InstanceType
+      SecurityGroups:
+        - !Ref WebServerSecurityGroup
+      KeyName: !Ref KeyName
+      UserData: !Base64 
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -xe
+            - |
+              yum update -y aws-cfn-bootstrap
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource WebServer '
+            - '         --configsets wordpress_install '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |+
+
+            - '/opt/aws/bin/cfn-signal -e $? '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource WebServer '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |+
+
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+Outputs:
+  WebsiteURL:
+    Value: !Join 
+      - ''
+      - - 'http://'
+        - !GetAtt 
+          - WebServer
+          - PublicDnsName
+        - /wordpress
+    Description: WordPress Website
+
+
+
+
+
+-- the idea is that with this template we're going to deploy a WordPress instance on a ec2 instance.
+
+
+
+
+
+-- create one  test-stack-configuration.json
+
+
+
+{
+  "Parameters" : {
+    "DBName" : "TestWordPressDB",
+    "DBPassword" : "mysupersecrettestpassword",
+    "DBRootPassword" : "mysupersecrettestpassword",
+    "DBUser" : "TestDBuser",    
+    "KeyName" : "DemoKeyPair"
+  }
+}
+
+
+-- change  "KeyName" of urs should be in same region as ur template region 
+
+
+
+
+
+
+---- Create one prod-stack-configuration.json 
+
+
+{
+  "Parameters" : {
+    "DBName" : "ProdWordPressDB",
+    "DBPassword" : "mysupersecretprodpassword",
+    "DBRootPassword" : "mysupersecretprodpassword",
+    "DBUser" : "ProdDBuser",    
+    "KeyName" : "terraform-key"
+  }
+}
+
+
+
+-- put these three files in an Zip and upload to the s3 bucket (enable versioning on the s3 bucket) make sure the bucket is in the same region sa ur template 
+
+
+
+
+
+
+
+----  create wordpress-pipeline.yaml file 
+
+
+
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  AWS CloudFormation Sample Template Continuous Delivery: This template
+  builds an AWS CodePipeline pipeline that implements a continuous delivery release
+  process for AWS CloudFormation stacks. Submit a CloudFormation source artifact
+  to an Amazon S3 location before building the pipeline. The pipeline uses the
+  artifact to automatically create stacks and change sets.
+  **WARNING** This template creates an Amazon EC2 instance. You will be billed
+  for the AWS resources used when you create a stack using this template.
+
+Parameters:
+  PipelineName:
+    Description: A name for pipeline
+    Type: String
+  S3Bucket:
+    Description: The name of the S3 bucket that contains the source artifact, which must be in the same region as this stack
+    Type: String
+  SourceS3Key:
+    Default: wordpress-single-instance.zip
+    Description: The file name of the source artifact, such as myfolder/myartifact.zip
+    Type: String
+  TemplateFileName:
+    Default: wordpress-single-instance.yaml
+    Description: The file name of the WordPress template
+    Type: String
+  TestStackName:
+    Default: Test-MyWordPressSite
+    Description: A name for the test WordPress stack
+    Type: String
+  TestStackConfig:
+    Default: test-stack-configuration.json
+    Description: The configuration file name for the test WordPress stack
+    Type: String
+  ProdStackName:
+    Default: Prod-MyWordPressSite
+    Description: A name for the production WordPress stack
+    Type: String
+  ProdStackConfig:
+    Default: prod-stack-configuration.json
+    Description: The configuration file name for the production WordPress stack
+    Type: String
+  ChangeSetName:
+    Default: UpdatePreview-MyWordPressSite
+    Description: A name for the production WordPress stack change set
+    Type: String
+  Email:
+    Description: The email address where CodePipeline sends pipeline notifications
+    Type: String
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "CodePipeline Settings"
+        Parameters:
+          - PipelineName
+          - S3Bucket
+          - SourceS3Key
+          - Email
+      - Label:
+          default: "Test Stack Settings"
+        Parameters:
+          - TestStackName
+          - TemplateFileName
+          - TestStackConfig
+      - Label:
+          default: "Production Stack Settings"
+        Parameters:
+          - ChangeSetName
+          - ProdStackName
+          - ProdStackConfig
+
+Resources:
+  ArtifactStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  CodePipelineSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref Email
+          Protocol: email
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref 'ArtifactStoreBucket'
+        Type: S3
+      DisableInboundStageTransitions: []
+      Name: !Ref 'PipelineName'
+      RoleArn: !GetAtt [PipelineRole, Arn]
+      Stages:
+        - Name: S3Source
+          Actions:
+            - Name: TemplateSource
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: '1'
+              Configuration:
+                S3Bucket: !Ref 'S3Bucket'
+                S3ObjectKey: !Ref 'SourceS3Key'
+              OutputArtifacts:
+                - Name: TemplateSource
+              RunOrder: 1
+        - Name: TestStage
+          Actions:
+            - Name: CreateStack
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              InputArtifacts:
+                - Name: TemplateSource
+              Configuration:
+                ActionMode: REPLACE_ON_FAILURE
+                RoleArn: !GetAtt [CFNRole, Arn]
+                StackName: !Ref TestStackName
+                TemplateConfiguration: !Sub "TemplateSource::${TestStackConfig}"
+                TemplatePath: !Sub "TemplateSource::${TemplateFileName}"
+              RunOrder: 1
+            - Name: ApproveTestStack
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                NotificationArn: !Ref CodePipelineSNSTopic
+                CustomData: !Sub 'Do you want to create a change set against the production stack and delete the ${TestStackName} stack?'
+              RunOrder: 2
+            - Name: DeleteTestStack
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: DELETE_ONLY
+                RoleArn: !GetAtt [CFNRole, Arn]
+                StackName: !Ref TestStackName
+              RunOrder: 3
+        - Name: ProdStage
+          Actions:
+            - Name: CreateChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              InputArtifacts:
+                - Name: TemplateSource
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                RoleArn: !GetAtt [CFNRole, Arn]
+                StackName: !Ref ProdStackName
+                ChangeSetName: !Ref ChangeSetName
+                TemplateConfiguration: !Sub "TemplateSource::${ProdStackConfig}"
+                TemplatePath: !Sub "TemplateSource::${TemplateFileName}"
+              RunOrder: 1
+            - Name: ApproveChangeSet
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                NotificationArn: !Ref CodePipelineSNSTopic
+                CustomData: !Sub 'A new change set was created for the ${ProdStackName} stack. Do you want to implement the changes?'
+              RunOrder: 2
+            - Name: ExecuteChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                ChangeSetName: !Ref ChangeSetName
+                RoleArn: !GetAtt [CFNRole, Arn]
+                StackName: !Ref ProdStackName
+              RunOrder: 3
+  CFNRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: ['sts:AssumeRole']
+          Effect: Allow
+          Principal:
+            Service: [cloudformation.amazonaws.com]
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+        - PolicyName: CloudFormationRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - 'ec2:*'
+                Effect: Allow
+                Resource: '*'
+              
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: ['sts:AssumeRole']
+          Effect: Allow
+          Principal:
+            Service: [codepipeline.amazonaws.com]
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+        - PolicyName: CodePipelineAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                - 's3:*'
+                - 'cloudformation:CreateStack'
+                - 'cloudformation:DescribeStacks'
+                - 'cloudformation:DeleteStack'
+                - 'cloudformation:UpdateStack'
+                - 'cloudformation:CreateChangeSet'
+                - 'cloudformation:ExecuteChangeSet'
+                - 'cloudformation:DeleteChangeSet'
+                - 'cloudformation:DescribeChangeSet'
+                - 'cloudformation:SetStackPolicy'
+                - 'iam:PassRole'
+                - 'sns:Publish'
+                Effect: Allow
+                Resource: '*'
+
+
+
+
+
+
+-- so this is a CloudFormation template that will create a code pipeline complete delivery pipeline.
+
+-- we have a few parameters such 
+
+     - pipeline name
+
+     - S3Bucket 
+
+     - etc... check in yaml code above 
+
+
+
+
+
+
+
+-- now deploy wordpress-pipeline.yaml the stack in CF console 
+
+-- PipelineName = any random name --> S3Bucket = where Zip File is present --> SourceS3Key = name of ur zip file ---> Email = ur mail -> create stack 
+
+-- it will create 5 resource like ArtifactStoreBucket , CFNRole , CodePipelineSNSTopic , Pipeline , PipelineRole
+
+-- go n check mail and subscribe 
+
+-- once u give all the info correct it will create pipeline and create stack for test 
+
+-- we have manual approval steps here and approve that steps to move nxt step 
+
+-- now to delete the stack , delete the prod stack manually and delete the objects in s3 manually then delete the stack 
+
+-- 
