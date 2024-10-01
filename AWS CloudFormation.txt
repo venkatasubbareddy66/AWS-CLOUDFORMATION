@@ -6877,3 +6877,943 @@ UpdatePolicy:
 -- Now to create these extensions we'll be practicing using the CloudFormation CLI.
 
 
+
+
+
+---------------------- Resource Types 
+
+
+-- if we look at the resource types for these extensions 
+
+-- it used to model and provision resources in CloudFormation that don't exist.
+
+-- So if you have a custom resource, you can create a custom resource backed by Lambda function but you can also create a resource type.
+
+-- to create a resource type , it will follow a different structure such as "Organization::Service::Resource".
+
+-- resource type package consists of 
+
+       - JSON schema that defines your type
+
+       - handlers to perform the required actions such as create, update, delete, read, and list.
+
+
+
+-- Steps to create Resource Types 
+
+      - Model: create and validate schema that serves as the definition of your Resource Types 
+
+      - Develop: Write a handler that defines five core operations(create, read, update, delete and list,)on your  Resource Types  and then you test them locally.
+
+      - Register: you register the resource type in CloudFormation using the CLI. So it can use them in your CloudFormation templates.
+
+
+-- these handlers are developed in four languages right now.      
+
+     - Python, Java, TypeScript, and Go.
+
+
+
+
+
+
+
+------------------------ Cloudformation CLI 
+
+
+
+-- So the CloudFormation CLI will be used to develop and test the third party extensions
+
+      - https://github.com/aws-cloudformation/cloudformation-cli
+
+
+-- you can register extensions for use  in CloudFormation
+
+-- we said that there are four languages supported to write your own extensions.
+
+      - Python, Java, TypeScript, and Go.
+
+
+
+
+
+
+
+
+------------------------------------------------------- 3rd Party Resource Type 
+
+
+
+-- there are some that can be downloaded and added to your accounts via the CloudFormation Registry from other vendors.
+
+
+-- EG:
+ 
+
+      - https://github.com/spotinst/spotinst-aws-cloudformation-registry
+
+      - https://github.com/newrelic/cloudformation-partner-integration
+
+      - https://github.com/fortinet/aws-cloudformation-resource-provider
+
+      - https://github.com/mnalezin/DynatraceInstallerAgent
+
+      - https://github.com/densify-dev/cloudformation-optimization-as-code
+
+      - https://github.com/DataDog/datadog-cloudformation-resources
+
+      - https://github.com/opsgenie/opsgenie-cloudformation-resources
+
+
+
+
+
+
+
+
+------------------------------------------------------- Custom Resources vs resource Types 
+
+
+
+
+https://aws.amazon.com/blogs/mt/managing-resources-using-aws-cloudformation-resource-types/#:~:text=When%20a%20custom%20resource%20is%20invoked%20by%20CloudFormation%2C%20the%20Lambda,registered%20with%20the%20CloudFormation%20registry.
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------- Template Modules
+
+
+
+https://aws.amazon.com/blogs/mt/introducing-aws-cloudformation-modules/
+
+
+
+-- So modules are used to package resources and their configuration for reuse across different stack templates.
+
+-- these are different from nested stacks. So when use a nested stack, you are actually creating a sub stack as part of your templates.
+
+-- But modules is more about code replacements 
+
+-- usecases:
+
+         - keep resource configurations aligned with best practices,
+
+         - use code written by experts.
+
+-- But with modules you are replacing code within your CloudFormation templates.  Whereas with nested stacks you are creating different stacks as part of your main stack.
+
+
+-- Module Contains :
+
+         - Template Sections: Resource , Output etc...
+
+         - module parameters : to input custom values for your module.
+         
+         - So the structure of a module is:
+
+                 - Organization::Service::Resource::MODULE 
+
+-- a module can be part of a specific parent template and the module can have children and the children of the module can be a module itself.                 
+
+
+
+
+
+
+
+------------------------------------------------------- Modules Parameters
+
+
+
+-- So modules can have parameters and they'll look at your input custom values for your modules.
+
+-- They will be defined the same way as template parameters and you can pass parent parameters to the module parameters,
+
+-- So you provide parameters to your templates and then these are passed on to your module
+
+-- but you can not perform constraint checking on your module parameters for now.
+
+
+
+
+------------------------------------------------------- reference resources in a module 
+
+
+
+-- So we can reference resources within the modules using the fully qualified logical name to get attributes out of modules, for example, using outputs.
+
+-- So we can use the GetAtt and Ref intrinsic function to get to reference them and to get values out of them.
+
+
+
+
+
+
+
+
+------------------------------------------------------- Module Hands ON
+
+
+
+
+-- we're going to create a module that creates the restrictive S3 bucket.
+
+     - So we have an S3 bucket,
+     - Amazon KMS key to encrypt the data at rest in the bucket,
+     - as well as a BucketPolicy that restricts access to the provided IAM roles and only allow HTTPS traffic to the bucket.
+
+
+
+-- we'll have all this configuration as part of one module, and then we'll reuse this module and a template that will create an Amazon Kinesis Data Firehose and that will use this bucket as a destination.
+
+
+
+
+
+-- open cloushell in and create folder like s3-module 
+
+      - mkdir s3-module 
+
+-- pip install cloudformation-cli
+
+-- cfn init
+
+-- choose "m"
+
+-- give name of Mdoule like this    MyCompany::S3::Bucket::MODULE
+
+-- So now this is creating the fragments for my module.
+
+-- So now we can write the fragment itself either in JSON or YAML.
+
+-- look cd fragments --> cat sample.json
+
+-- we dont want sample.json so remove rm sample.json
+
+-- cd fragments --> nano s3-bucket.yaml and paste the code below 
+
+
+
+
+
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create a S3 bucket that follows MyCompany's standards
+Parameters:
+  KMSKeyAlias:
+    Description: >-
+      The alias for your KMS key. If you will leave this field empty KMS key
+      alias won't be created along the key.
+    Type: String
+    AllowedPattern: '^(?!aws)([a-zA-Z0-9\-\_\/]){1,32}$|^$'
+    MinLength: 0
+    MaxLength: 32
+    ConstraintDescription: >-
+      KMS key alias must be at least 1 and no more than 32 characters long, can
+      contain lowercase and uppercase letters, numbers, hyphens, underscores and
+      forward slashes and cannot begin with aws.
+  ReadOnlyArn:
+    Description: >-
+      Provide ARN of an existing Principal (role) that will be granted with read
+      only access to the S3 bucket (e.g.
+      'arn:aws:iam::123456789xxx:role/myS3ROrole'). If not specified, access
+      will be granted to current AWS account:root only. CF deployment will fail
+      and rollback for non-existing ARN.
+    Type: String
+    Default: ''
+    AllowedPattern: >-
+      ^(arn:aws:iam::\d{12}:role(\/|\/[\w\!\"\#\$\%\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\`\{\|\}\~]{1,510}\/)[\w\+\=\,\.\@\-]{1,64})$|^$
+    ConstraintDescription: >-
+      IAM role ARN must start with arn:aws:iam::<12-digit AWS account
+      number>:role/[<path>/]<name of role>. The name of role must be at least 1
+      and no more than 64 characters long, can contain lowercase letters,
+      uppercase letters, numbers, plus (+), equal (=), comma (,), period (.), at
+      (@), underscore (_), and hyphen (-). Path is optional and must not exceed
+      510 characters.
+  ReadWriteArn:
+    Description: >-
+      Provide ARN of an existing Principal (role) that will be granted with read
+      and write access to the S3 bucket (e.g.
+      'arn:aws:iam::123456789xxx:role/myS3RWrole'). If not specified, access
+      will be granted to current AWS account:root only. CF deployment will fail
+      and rollback for non-existing ARN.
+    Type: String
+    Default: ''
+    AllowedPattern: >-
+      ^(arn:aws:iam::\d{12}:role(\/|\/[\w\!\"\#\$\%\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\`\{\|\}\~]{1,510}\/)[\w\+\=\,\.\@\-]{1,64})$|^$
+    ConstraintDescription: >-
+      IAM role ARN must start with arn:aws:iam::<12-digit AWS account
+      number>:role/[<path>/]<name of role>. The name of role must be at least 1
+      and no more than 64 characters long, can contain lowercase letters,
+      uppercase letters, numbers, plus (+), equal (=), comma (,), period (.), at
+      (@), underscore (_), and hyphen (-). Path is optional and must not exceed
+      510 characters.
+
+Resources:
+  KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Enabled: true
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: 'Give AWS account:root full control over the KMS key'
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - 'kms:*'
+            Resource: '*'
+          - Sid: 'Give ReadOnlyRole access to use KMS key for decryption'
+            Effect: Allow
+            Principal:
+              AWS: !Ref ReadOnlyArn
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:DescribeKey'
+            Resource: '*'
+          - Sid: 'Give the ReadWriteRole access to use KMS key for encryption and decryption'
+            Effect: Allow
+            Principal:
+              AWS: !Ref ReadWriteArn
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+
+  KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${KMSKeyAlias}'
+      TargetKeyId: !Ref KmsKey
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: BucketOwnerFullControl
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !Ref KmsKey
+              SSEAlgorithm: 'aws:kms'
+      BucketName: !Sub '${AWS::StackName}-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: DenyIncorrectEncryptionHeader
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${Bucket}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-server-side-encryption': AES256
+          - Sid: DenyPublicReadACL
+            Effect: Deny
+            Principal: '*'
+            Action:
+              - 's3:PutObject'
+              - 's3:PutObjectAcl'
+            Resource: !Sub 'arn:aws:s3:::${Bucket}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-acl':
+                  - public-read
+                  - public-read-write
+                  - authenticated-read
+          - Sid: DenyPublicReadGrant
+            Effect: Deny
+            Principal: '*'
+            Action:
+              - 's3:PutObject'
+              - 's3:PutObjectAcl'
+            Resource: !Sub 'arn:aws:s3:::${Bucket}/*'
+            Condition:
+              StringLike:
+                's3:x-amz-grant-read':
+                  - '*http://acs.amazonaws.com/groups/global/AllUsers*'
+                  - '*http://acs.amazonaws.com/groups/global/AuthenticatedUsers*'
+          - Sid: DenyNonHttpsConnections
+            Effect: Deny
+            Principal: '*'
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${Bucket}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+          - Sid: 'Give ReadOnlyRole access to get objects from bucket and list bucket'
+            Effect: Allow
+            Principal:
+              AWS: !Ref ReadOnlyArn
+            Action:
+              - 's3:GetObject'
+              - 's3:GetObjectTagging'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${Bucket}'
+              - !Sub 'arn:aws:s3:::${Bucket}/*'
+          - Sid: 'Give the ReadWriteRole access to get and put objects from and to bucket and list bucket and multipart uploads'
+            Effect: Allow
+            Principal:
+              AWS: !Ref ReadWriteArn
+            Action:
+              - 's3:DeleteObject'
+              - 's3:DeleteObjectTagging'
+              - 's3:GetObject'
+              - 's3:GetObjectTagging'
+              - 's3:ListBucket'
+              - 's3:PutObject'
+              - 's3:PutObjectTagging'
+            Resource:
+              - !Sub 'arn:aws:s3:::${Bucket}'
+              - !Sub 'arn:aws:s3:::${Bucket}/*'
+
+Outputs:
+  BucketArn:
+    Description: ARN of the bucket created.
+    Value: !GetAtt Bucket.Arn
+  BucketName:
+    Description: Name of the bucket created.
+    Value: !Ref Bucket
+  KmsKeyAlias:
+    Description: Alias of SSE-KMS Customer Managed Key used to encrypt S3 bucket content.
+    Value: !Ref KmsKeyAlias
+  KmsKeyArn:
+    Description: ARN of SSE-KMS Customer Managed Key used to encrypt S3 bucket content.
+    Value: !GetAtt KmsKey.Arn
+
+
+
+
+
+-- cd .. 
+
+-- go back to s3-module 
+
+-- now do cfn submit -v ,    run thsi command where u did cfn init (in folder or from root)
+ 
+-- once u run the above cmnd it will come like this 
+
+
+
+
+
+Validating your module fragments...
+Run scan of template /home/cloudshell-user/fragments/s3-bucket.yaml
+Module fragment might be valid, but there are warnings from cfn-lint (https://github.com/aws-cloudformation/cfn-python-lint):
+        Consider using AWS::S3::BucketPolicy instead of AccessControl (from rule W3045: Controlling access to an S3 bucket should be done with bucket policies)
+Creating CloudFormationManagedUploadInfrastructure
+CloudFormationManagedUploadInfrastructure stack was successfully created
+Successfully submitted type. Waiting for registration with token '8c826b78-add8-44a0-bf63-804ff512ae4d' to complete.
+Registration complete.
+{'ProgressStatus': 'COMPLETE', 'Description': 'Deployment is currently in DEPLOY_STAGE of status COMPLETED', 'TypeArn': 'arn:aws:cloudformation:us-east-1:298132369629:type/module/MyCompany-S3-Bucket-MODULE', 'TypeVersionArn': 'arn:aws:cloudformation:us-east-1:298132369629:type/module/MyCompany-S3-Bucket-MODULE/00000001', 'ResponseMetadata': {'RequestId': 'aecd8b8c-63dd-43d7-84c5-d8f41e972378', 'HTTPStatusCode': 200, 'HTTPHeaders': {'x-amzn-requestid': 'aecd8b8c-63dd-43d7-84c5-d8f41e972378', 'date': 'Tue, 01 Oct 2024 09:34:57 GMT', 'content-type': 'text/xml', 'content-length': '685', 'connection': 'keep-alive'}, 'RetryAttempts': 0}}
+
+
+-- now go to CF console --> Activated extensions ----> Modules ---> Filter extension type = Privately registered  , u will able to see the Module that we have created 
+
+-- check the schema of the module 
+
+-- we can also have example temlate how to use this module 
+
+
+{
+    "Resources": {
+        "MyModule": {
+            "Type": "MyCompany::S3::Bucket::MODULE",
+            "Properties": {
+                "KMSKeyAlias": "KMSKeyAlias",
+                "ReadOnlyArn": "ReadOnlyArn",
+                "ReadWriteArn": "ReadWriteArn"
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+-- So next, well, we have to use this module
+
+-- So now let's assume that we want to create that Firehose templates, And we want to reference the module.
+
+-- So we're going to create a Firehose stream that writes into Amazon S3
+
+-- to do so, we're going to have a Firehose destination 
+
+-- type = give module name in the template 
+
+
+Resources:
+  FirehoseDestination: # Module logical name
+    Type: MyCompany::S3::Bucket::MODULE
+    Properties:
+      KMSKeyAlias: !Sub "${AWS::StackName}"
+      ReadWriteArn: !GetAtt FirehoseRole.Arn
+      ReadOnlyArn: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+
+
+
+-- We just pass on three different properties, the KMS key Alias, the Read Write ARN for Firehose, as well as the Read Only ARN for the role that would just pass.
+
+
+
+
+-- create template.yaml File
+
+
+
+
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Create a Firehose stream that writes to S3"
+
+Resources:
+  FirehoseDestination: # Module logical name
+    Type: MyCompany::S3::Bucket::MODULE
+    Properties:
+      KMSKeyAlias: !Sub "${AWS::StackName}"
+      ReadWriteArn: !GetAtt FirehoseRole.Arn
+      ReadOnlyArn: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+
+  FirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AssumeRole1
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  FirehosePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "ReadWrite"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: "KmsEncryptionDecryption"
+            Effect: Allow
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: !GetAtt FirehoseDestinationKmsKey.Arn # Get KmsKey Arn inside our module
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub 's3:${AWS::Region}.amazonaws.com'
+              StringLike:
+                kms:EncryptionContext:aws:s3:arn: !Sub '${FirehoseDestinationBucket.Arn}/*' # Get Bucket Arn inside our module
+          - Sid: FirehoseAccess
+            Effect: Allow
+            Action:
+            - kinesis:DescribeStream
+            - kinesis:GetShardIterator
+            - kinesis:GetRecords
+            - kinesis:ListShards
+            Resource: !GetAtt Firehose.Arn
+          - Sid: "S3ListBucket"
+            Effect: Allow
+            Action:
+              - 's3:ListBucket'
+              - 's3:ListBucketByTags'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:GetBucketLocation'
+            Resource: !GetAtt FirehoseDestinationBucket.Arn # Get Bucket Arn inside our module
+          - Sid: "S3GetPutDeleteObject"
+            Effect: Allow
+            Action:
+              - 's3:DeleteObject'
+              - 's3:DeleteObjectTagging'
+              - 's3:GetObject'
+              - 's3:GetObjectTagging'
+              - 's3:PutObject'
+              - 's3:PutObjectTagging'
+            Resource: !Sub '${FirehoseDestinationBucket.Arn}/*' # Get Bucket Arn inside our module
+      Roles: 
+      - !Ref FirehoseRole
+
+  Firehose:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: !Sub "${AWS::StackName}"
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !GetAtt FirehoseDestinationBucket.Arn # Get Bucket Arn inside our module
+        RoleARN: !GetAtt FirehoseRole.Arn
+        EncryptionConfiguration:
+          KMSEncryptionConfig:
+            AWSKMSKeyARN: !GetAtt FirehoseDestinationKmsKey.Arn # Get KmsKey Arn inside our module
+
+
+
+
+
+
+-- deploy the stack 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION  Generating CloudFormation templates: Imports, SAM, CDK & Macros =========================================================
+
+
+
+
+
+
+------------------------------------------------------- Resource Import 
+
+
+
+-- The idea is that with CloudFormation, all the resources created by CloudFormation are within your stacks but it is now possible to import resources created out of CloudFormation within your CloudFormation templates.
+
+-- So the idea is that we don't need to delete and recreate the resources. We can just import them.
+
+-- during an import operation, you're going to need a lot of things.
+
+      - You're going to need you to have to have a templates, and the template must describe the entire stack which is the original stack resources as well as the target resources that you want to import.
+
+      - As well as a unique identifier for each resource. eg : s3 bucket name 
+
+
+-- So say we want to import an S3 bucket into a stack. First, we're going to write this template that will have the S3 bucket defined in it.
+
+-- Then we're going to import them into CloudFormation using the import option.
+
+-- And then all of a sudden the S3 buckets will be managed as part of the CloudFormation stack.
+
+-- So each resource that you must import must have a DeletionPolicy attribute of any value and an identifier.
+
+-- you can not import the same resource into multiple stacks because CloudFormation performs some checks.
+
+
+
+
+
+------------------------------------------------------- CloudFormation validation on stack 
+
+
+-- So, first of all, that the import to resources exists,
+
+-- the properties and configuration values adhere to the resource schema,
+
+-- the resources required properties are specified,
+
+-- the resource to import does not belong to another stack.
+
+-- there is no check of CloudFormation that the actual template configuration matches the actual configuration.
+
+-- So it is recommended for you to run a Drift Detection on the imported resources after an import operation.
+
+
+UseCases: The use cases for importing resources
+
+    - to create a new stack from existing resources
+
+    - import existing resources into an existing stack,
+
+    - To move the resources between stacks.
+
+    - To remove a resource from a stack
+
+    - to remediate a detected drift,
+
+    - as well as a moving nested stack from a parent stack and import it into another parent stack, 
+    
+    - or nesting an existing stack.
+
+
+
+
+
+------------------------------------------------------- Resource Import  Hands On
+
+
+
+
+
+Resources:
+  ImportedTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  ImportedBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+
+
+
+
+
+-- first we're going to create manually a DynamoDB table. And an S3 bucket. But we will make sure that they are created manually,
+
+-- then we'll use this template to import them into a CloudFormation template.
+
+-- So if we look at the DynamoDB table, we have a PAY_PER_REQUEST BillingMode. and s3 
+
+-- we can see, the DeletionPolicy is Retain for both of these things, because we must specify a DeletionPolicy, when we import resources.
+
+
+
+-- go to DynamoDB --> Partition key = id --> Table settings = Customize settings -->  DynamoDB Standard -----> Read/write capacity settings = on-demand 
+
+-- create s3 bucket also 
+
+-- So next, what we have to do, is to import our CloudFormation resource, into a CloudFormation stack.
+
+-- create one template.yaml
+
+
+Resources:
+  ImportedTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  ImportedBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+
+
+
+
+
+
+
+-- CF console --> create stack (choose existing resource) --> upload the template --> give table and bucket names --> import changes 
+
+-- CloudFormation is going to check whether or not these two things are part of, existing CloudFormation resource templates.if not, then they're going to be imported.
+
+-- you can also import ec2 
+
+
+
+Resources:
+  ImportedTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  ImportedBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+  
+  ImportedInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    Properties:
+      ImageId: ami-043097594a7df80ec
+      InstanceType: t2.micro
+
+
+
+-- create ec2 instance and paste ami id in code 
+
+-- ImageId: ami-043097594a7df80ec should be match with your region 
+
+-- once you done --> check tags for the ec2 
+
+
+-- now if you wanted to delete this stack, this would not be possible, because, the DeletionPolicy of all these resources is Retain.
+
+-- So we need to push an update to change the DeletionPolicy to Delete, as part of an update.
+
+
+
+
+Resources:
+  ImportedTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  ImportedBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+  
+  ImportedInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    Properties:
+      ImageId: ami-043097594a7df80ec
+      InstanceType: t2.micro
+
+
+
+
+
+-- do update on the stack with above stack 
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------- AWS SAM
+
+
+
+• SAM = Serverless Application Model
+
+• Framework for developing and deploying serverless applications
+
+• All the configuration is YAML code
+
+• Generate complex CloudFormation from simple SAM YAML file
+
+• Supports anything from CloudFormation: Outputs, Mappings, Parameters, Resources...
+
+• SAM can use CodeDeploy to deploy Lambda functions
+
+• SAM can help you to run Lambda, API Gateway, DynamoDB locally
+
+
+
+
+
+------------------------------------------------------- AWS SAM  – Recipe
+
+
+
+• Transform Header indicates it’s SAM template:
+
+      • Transform: 'AWS::Serverless-2016-10-31'
+
+
+• Write Code
+
+      • AWS::Serverless::Function
+      • AWS::Serverless::Api
+      • AWS::Serverless::SimpleTable
+
+
+• Package & Deploy: sam deploy (optionally preceded by “sam package”)
+
+• Quickly sync local changes to AWS Lambda (SAM Accelerate): sam sync --watch
+
+
+
+
+
+
+------------------------------------------------------- AWS SAM  Hands ON
+
+
+
+-- we'll use a sample Hello World! application, and 
+
+-- this SAM template is again, to be used to deploy a Lambda function
+
+-- go to cloushell --> 
+
+            sam init
+
+            choose 1
+
+            application = Example helloworld 
+
+            runtime = python latest
+
+            select options as per ur choice 
+
+            cd sam-app
+
+            ll
+
+                  total 32
+                  drwxr-xr-x. 2 cloudshell-user cloudshell-user 4096 Oct  1 13:21 events
+                  drwxr-xr-x. 2 cloudshell-user cloudshell-user 4096 Oct  1 13:21 hello_world
+                  -rw-r--r--. 1 cloudshell-user cloudshell-user    0 Oct  1 13:21 __init__.py
+                  -rw-r--r--. 1 cloudshell-user cloudshell-user 8329 Oct  1 13:21 README.md
+                  -rw-r--r--. 1 cloudshell-user cloudshell-user  679 Oct  1 13:21 samconfig.toml
+                  -rw-r--r--. 1 cloudshell-user cloudshell-user 2447 Oct  1 13:21 template.yaml
+                  drwxr-xr-x. 4 cloudshell-user cloudshell-user 4096 Oct  1 13:21 tests
+
+
+            sam build   (update from documentation if it is not working with version)
+
+            sam deploy --guided
+
+            keep enter and y 
+
+
+
+
+-- if we go into CloudFormation, this is creating a stack right now.
+
+-- check resource it will create s3 bucket
+
