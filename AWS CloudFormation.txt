@@ -6671,4 +6671,209 @@ EG:
 
 -- if you want to update your secrets, you must first update the resource containing the secretsmanager dynamic reference, using one of the resource properties,
 
--- 
+
+
+
+
+
+
+
+
+------------------------------------------------ CloudFormation – Dynamic References Hands ON 
+
+
+
+
+
+-- create yaml file 
+
+
+
+
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+  ImageId: # Public SSM Paramater
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  MyEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      KeyName: !Ref KeyName
+      # ssm dynamic reference
+      InstanceType: '{{resolve:ssm:/ec2/instanceType:1}}'
+
+  MyIAMUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: 'sample-user'
+      LoginProfile:
+        # ssm-secure dynamic reference (latest version)
+        Password: '{{resolve:ssm-secure:/iam/userPassword}}'
+
+  MyDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: db.t2.micro
+      Engine: mysql
+      AllocatedStorage: "20"
+      VPCSecurityGroups:
+      - !GetAtt [DBEC2SecurityGroup, GroupId]
+      # secretsmanager dynamic reference
+      MasterUsername: '{{resolve:secretsmanager:MyRDSSecret:SecretString:username}}'
+      MasterUserPassword: '{{resolve:secretsmanager:MyRDSSecret:SecretString:password}}'
+  
+  DBEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Allow access from anywhwere to database'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: "0.0.0.0/0"
+
+
+
+
+
+-- the image ID is still used because we reference a public SSM parameter.
+
+-- but public SSM parameter can only work  within the "parameter section" for now, not within the template by using dynamic references.
+
+-- if you scroll down now, and look at this EC2 instance, the image ID is referencing a parameter.
+
+-- but the instance type now, instead of specifying t2.micro manually, we are resolving it from the SSM parameter store
+
+-- now go to parameter store --> create path like this /ec2/instanceType --> std --> string --> value = t2.micro
+
+-- now SSM a confirmation will resolve this parameter from SSM directly.
+
+-- same for sample I am user also create path /iam/userPassword --> SecureString ---> My current account ---> value = give anypassword --> create 
+
+-- this password only lives within the parameter store. As we can see now this is a secure string, and is going to be retrieved at run time by again, our CloudFormation template.
+
+--   MyDBInstance: --> open secret manager --> Other type of secret --> create username and password --> name = same as in code --> create 
+
+-- So now we have these usernames and passwords are going to be resolved directly from the secrets manager, 
+
+-- deploy yaml file 
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------- AWS CLOUDFORMATION UpdatePolicy 
+
+
+
+
+-- UpdatePolicy is a way for you to specify how CloudFormation will update a few of the following resources.
+
+     - AWS::AutoScaling::AutoScalingGroup(3 update policies)
+
+            - AutoScalingRollingUpdate,
+            - AutoScalingReplacingUpdate,
+            - AutoScalingScheduledAction.
+
+
+    -  AWS::ElasticCache::ReplicationGroup
+
+            - it will modify the ReplicationGroup shards by adding or removing shards, rather than replacing resources in ElastiCache.        
+
+    -  AWS::Elasticsearch::Domain
+
+            - also can be upgraded to a new version rather than replacing the resource using an update policy.
+
+    - AWS::Lambda::Alias
+
+            - if you update it, then CloudFormation, using the policy, can perform a code that deploy deployments when the version changes on the alias.            
+
+
+
+
+
+-- AutoScalingRollingUpdate : 
+
+      - to specify whether CloudFormation update instances that are in an auto scaling group.if you want to update them in batches or all at once.
+
+  UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+        MinInstancesInService: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+
+
+
+
+
+-- AutoScalingReplacingUpdate
+
+       - to specify whether CloudFormation replaces an ASG with a new one, or will replace the instances within the ASG.
+
+       - So this is a Boolean. And in case you want to replace the ASG yourself, then CloudFormation will create a new ASG and retain the old ASG until it has finished bootstrapping the new.
+
+UpdatePolicy:
+      AutoScalingRollingUpdate:
+         willReplace: Boolean
+
+
+
+
+
+-- AutoScalingScheduledAction.
+
+      - you specify how CloudFormation handles updates for the group size property.
+
+      - So MinSize, MaxSize and DesiredCapacity,of an ASG that has a scheduled action.
+
+
+
+UpdatePolicy:
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: Boolean
+
+
+
+
+
+
+
+
+------------------------------------------------------- CloudFormation Registry 
+
+
+
+-- we've seen custom resources but now we're going to go one step deeper.
+
+-- there's something called the registry,that contains either private or public extensions.
+
+-- So what are extensions?
+
+      - Extensions are artifacts that will augment the functionality of CloudFormation resources and properties.
+
+      -  you can register these extensions into the CloudFormation Registry.
+
+-- So these extensions can be written by anyone such as AWS, Amazon Partners, Marketplace sellers, and the community and we have different extension types.
+
+-- we have different extension types.
+
+     - private extensions : that you create or that are shared with you 
+
+     - Public  extensions : which are provided by AWS,(ex:AWS::DynamoDB::Table)
+
+
+-- Now to create these extensions we'll be practicing using the CloudFormation CLI.
+
+
