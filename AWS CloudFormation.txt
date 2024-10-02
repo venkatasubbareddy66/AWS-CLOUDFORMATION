@@ -7817,3 +7817,968 @@ Resources:
 
 -- check resource it will create s3 bucket
 
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------- AWS Cloud Development Kit (CDK)
+
+
+
+• Define your cloud infrastructure using a familiar language:
+
+    • JavaScript/TypeScript,Python,Java,and.NET
+
+
+• Contains high level components called "constructs" , these constructs will be transformed later on into a CloudFormation template.
+
+• The code is “compiled” into a CloudFormation template (JSON/YAML)
+
+• You can therefore deploy infrastructure and application runtime code together
+
+    • Great for Lambda functions
+    • Great for Docker containers in ECS / EKS
+
+-- can import/Migrate a cloudformation template to AWS CDK 
+
+
+
+
+
+
+
+
+
+------------------------------------------------------- CDK vs SAM
+
+
+
+• SAM:
+
+    • Serverless focused
+    • Write your template declaratively in JSON orYAML 
+    • Great for quickly getting started with Lambda
+    • Leverages CloudFormation
+
+-- if you want to just write a Lambda function, SAM is probably gonna be a better choice.    
+
+
+• CDK:
+
+
+    • All AWS services
+    • Write infra in a programming language JavaScript/TypeScript, Python, Java, and .NET
+    • Leverages CloudFormation
+
+-- if you want to write your entire infrastructure using the CDK,    
+
+      - a CloudFormation and a program language in the CDK is going to be the way to go.
+
+
+
+
+
+
+
+
+
+------------------------------------------------------- CDK Hands ON
+
+
+
+steps.sh 
+
+
+# 1. install the CDK
+sudo npm install -g aws-cdk
+
+# directory name must be cdk-app/ to go with the rest of the tutorial, changing it will cause an error
+mkdir cdk-app
+cd cdk-app/
+
+# initialize the application
+cdk init --language javascript
+
+# verify it works correctly
+cdk ls
+
+# install the necessary packages
+npm install @aws-cdk/aws-s3 @aws-cdk/aws-iam @aws-cdk/aws-lambda @aws-cdk/aws-lambda-event-sources @aws-cdk/aws-dynamodb
+
+
+# 2. copy the content of cdk-app-stack.js into lib/cdk-app-stack.js
+
+
+
+# go to  lib folder
+
+cd lib 
+
+# create one file eg: nano cdk-app-stack.js  and uplaod this code 
+
+
+const cdk = require('aws-cdk-lib');
+const { Stack } = cdk;
+const s3 = require('aws-cdk-lib/aws-s3');
+const iam = require('aws-cdk-lib/aws-iam');
+const lambda = require('aws-cdk-lib/aws-lambda');
+const lambdaEventSource = require('aws-cdk-lib/aws-lambda-event-sources');
+const dynamodb = require('aws-cdk-lib/aws-dynamodb');
+const { Construct } = require('constructs');
+
+const imageBucket = "cdk-rekn-imagebucket";
+
+class CdkAppStack extends Stack {
+  /**
+   *
+   * @param {Construct} scope
+   * @param {string} id
+   * @param {cdk.StackProps=} props
+   */
+  constructor(scope, id, props) {
+    super(scope, id, props);
+
+    // The code that defines your stack goes here
+
+    // ========================================
+    // Bucket for storing images
+    // ========================================
+    const bucket = new s3.Bucket(this, imageBucket, {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    new cdk.CfnOutput(this, "Bucket", { value: bucket.bucketName });
+
+    // ========================================
+    // Role for AWS Lambda
+    // ========================================
+    const role = new iam.Role(this, "cdk-rekn-lambdarole", {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+    });
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "rekognition:*",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ],
+        resources: ["*"],
+      })
+    );
+
+    // ========================================
+    // DynamoDB table for storing image labels
+    // ========================================
+    const table = new dynamodb.Table(this, "cdk-rekn-imagetable", {
+      partitionKey: { name: "Image", type: dynamodb.AttributeType.STRING },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    new cdk.CfnOutput(this, "Table", { value: table.tableName });
+
+    // ========================================
+    // AWS Lambda function
+    // ========================================
+    const lambdaFn = new lambda.Function(this, "cdk-rekn-function", {
+      code: lambda.Code.fromAsset("lambda"),
+      runtime: lambda.Runtime.PYTHON_3_8,
+      handler: "index.handler",
+      role: role,
+      environment: {
+        TABLE: table.tableName,
+        BUCKET: bucket.bucketName,
+      },
+    });
+    lambdaFn.addEventSource(
+      new lambdaEventSource.S3EventSource(bucket, {
+        events: [s3.EventType.OBJECT_CREATED],
+      })
+    );
+
+    bucket.grantReadWrite(lambdaFn);
+    table.grantFullAccess(lambdaFn);
+  }
+}
+
+module.exports = { CdkAppStack };
+
+
+
+
+
+# go to cdk-app 
+
+cd ..
+
+
+
+
+
+
+
+
+
+# 3. setup the Lambda function
+mkdir lambda && cd lambda && touch index.py
+
+
+nano index.py
+
+
+
+#
+# Lambda function detect labels in image using Amazon Rekognition
+#
+
+from __future__ import print_function
+import boto3
+import json
+import os
+from boto3.dynamodb.conditions import Key, Attr
+
+minCofidence = 60
+
+
+def handler(event, context):
+    for record in event['Records']:
+        bucket = record['s3']['bucket']['name']
+        key = record['s3']['object']['key']
+
+    rekFunction(bucket, key)
+
+
+def rekFunction(bucket, key):
+    print("Detected the following image in S3")
+    print("Bucket: " + bucket + " key name: " + key)
+
+    client = boto3.client("rekognition")
+
+    response = client.detect_labels(Image={"S3Object": {"Bucket": bucket, "Name": key}},
+                                    MaxLabels=10, MinConfidence=minCofidence)
+
+    # Get the service resource
+    dynamodb = boto3.resource("dynamodb")
+
+    # Instantiate a table resource object
+    imageLabelsTable = os.environ["TABLE"]
+    table = dynamodb.Table(imageLabelsTable)
+
+    # Put item into table
+    table.put_item(
+        Item={"Image": key}
+    )
+
+    objectsDetected = []
+
+    for label in response["Labels"]:
+        newItem = label["Name"]
+        objectsDetected.append(newItem)
+        objectNum = len(objectsDetected)
+        itemAtt = f"object{objectNum}"
+        response = table.update_item(
+            Key={"Image": key},
+            UpdateExpression=f"set {itemAtt} = :r",
+            ExpressionAttributeValues={":r": f"{newItem}"},
+            ReturnValues="UPDATED_NEW"
+        )
+
+
+
+
+# cd ..
+
+
+# 4. bootstrap the CDK application
+cdk bootstrap
+
+
+-- go to cloudformation and check it will create stack for you 
+
+
+
+
+
+# 5. (optional) synthesize as a CloudFormation template
+cdk synth
+
+   - this is going to generate the CF template for you 
+
+
+
+
+# 6. deploy the CDK stack
+cdk deploy
+
+   - choose y 
+    
+   - go to CF "CdkAppStack" is being deployed.
+
+   - check template in CF , 
+
+   - So this is why the CDK is so helpful sometimes you can just have very very complex CloudFormation templates being generated using a few lines of code.
+
+
+
+
+
+-- go to CdkAppStack --> Resources --> AWS::S3::Bucket --> to to s3 bucket and upload some images from google randoma images  into it 
+
+
+
+-- so what's going to happen is that now the Lambda function is being triggered.
+
+-- open dynamodb table created by CF --> explore items --> run 
+
+-- we can see that a lot of objects have been found by recognition.
+
+-- this entire application was deployed with just a little bit of code into a very complex CloudFormation template
+
+
+
+# 7. empty the s3 bucket
+
+
+# 8. destroy the stack
+cdk destroy
+
+
+
+
+
+
+
+
+-- open cloushell , run the above commands one by one
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------- CloudFormation Macros 
+
+
+
+
+-- So Macros allow you to do custom processing on CloudFormation templates.
+
+      - For example, you can create a find-and-replace function.
+
+      - You can create specific transformations
+
+
+
+-- we'll go through a hands-on that we'll use account to duplicate a resource as many times as we count it.
+
+-- for example, AWS::Serverless which takes an entire template written in SAM syntax and transform it into a complaint cloudformation template 
+
+-- So to define a Macro,
+
+          - you need a Lambda function that will take an input of what needs to be processed and output a CloudFormation templates.
+
+          - A Resource of Type AWS::CloudFormation::Macro , Then you need to create this as a type of CloudFormation Macro which is a separate stack to define your Macro.
+
+
+-- You can process:
+
+          - you can process either your entire templates(Reference the MAcro in the Transform section in the template)
+
+          - a snippet of the template,(Reference the Macro in Fn::Transform)
+
+
+-- Then CloudFormation generates a ChangeSet that will include the process templates.
+
+-- you'll be good to go to apply these templates into your CloudFormation stack.
+
+
+
+
+
+
+
+------------------------------------------------------- How to Define Macro 
+
+
+
+
+CompanyDefaultsMacro:
+  Type: AWS::CloudFormation::Macro
+  Properties:
+    Name: CompanyDefaults
+    FunctionName:
+      Fn::GetAtt:
+        - CompanyDefaultsLambdaFunction
+        - Arn
+
+
+
+
+Resources:
+  Macro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: Count
+      FunctionName: !GetAtt CountMacroFunction.Arn
+
+
+
+
+
+
+
+------------------------------------------------------- how to use Macro 
+
+
+
+-- to use a Macro in a separate templates, you either have a transform at the very, very top.
+
+
+
+Transform: Count
+
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Count: 3
+    Properties:
+      Tags:
+        - Key: TestKey
+          Value: my bucket %d
+
+
+
+
+
+
+
+------------------------------------------------------- Good to Know - Macro
+
+
+
+-- you can not use Macros in the same template as where you are defining your Macros,
+
+-- you cannot have Macros within the Macros.
+
+-- Macros currently are not supported within StackSets
+
+-- Macros are going to be evaluated in order from the deepest or the shallowest.(top-level macros are executed last)
+
+-- In terms of billing for the Macro feature is going to be per AWS Lambda invocation.
+
+-- transform hosted by AWS 
+
+      - https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/transform-reference.html
+
+-- Macros Example 
+
+
+      - https://github.com/aws-cloudformation/aws-cloudformation-templates/tree/main/CloudFormation/MacrosExamples
+
+
+
+  
+
+
+
+------------------------------------------------------- Hands ON Macros 
+
+
+
+-- we're going to create a macro called Count
+
+-- this count macro is going to be applied at the top of our templates.
+
+-- This macro will be applied. And then the idea is that again each resource will be duplicated without having to copy and paste the resource.
+
+-- you can also use the percentage %D placeholder into any string value to replace by the iteration counting.
+
+-- create count-macro.yaml
+
+
+
+
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  Count Macro
+  A simple iterator for creating multipleidentical resources
+
+Resources:
+  Macro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: Count
+      FunctionName: !GetAtt CountMacroFunction.Arn
+  
+  CountMacroFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Runtime: python3.8
+      Timeout: 360
+      Role: !GetAtt AWSLambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import copy
+          import json
+
+          def process_template(template, parameters):
+            new_template = copy.deepcopy(template)
+            status = 'success'
+
+            for name, resource in template['Resources'].items():
+              if 'Count' in resource:
+
+                # Check if the value of Count is referenced to a parameter passed in the template
+                try:
+                  refValue = new_template['Resources'][name]['Count'].pop('Ref')
+                  # Convert referenced parameter to an integer value
+                  count = int(parameters[refValue])
+                  # Remove the Count property from this resource
+                  new_template['Resources'][name].pop('Count')
+                
+                except AttributeError:
+                  # Use numeric Count value
+                  count = new_template['Resources'][name].pop('Count')
+                
+                print("Found 'Count' property with value {} in '{}' resource...multiplying!".format(count, name))
+
+                # Remove the original resource from the template but take a local copy of it
+                resourceToMultiply = new_template['Resources'].pop(name)
+
+                # Create a new block of the resource muliplied with names ending in the iterator and the placeholders substituted
+                resourcesAfterMultiplication = multiply(name, resourceToMultiply, count)
+
+                if not set(resourcesAfterMultiplication.keys()) & set(new_template['Resources'].keys()):
+                  new_template['Resources'].update(resourcesAfterMultiplication)
+                else:
+                  status = 'failed'
+                  return status, template
+              
+              else:
+                print("Did not find 'Count' property in '{}' resource...Nothing to do!".format(name))
+            
+            return status, new_template
+        
+          def update_placeholder(resource_structure, iteration):
+
+            # Convert the json into a string
+            resourceString = json.dumps(resource_structure)
+
+            # Count the number of times the placeholder is found in the string
+            placeHolderCount = resourceString.count('%d')
+
+            # If the placeholder is found then replace it
+            if placeHolderCount > 0:
+              print ("Found {} occurrences of decimal placeholder in JSON, replacing with iterator value {}".format(placeHolderCount, iteration))
+
+              # Make a list of the values that we will use to replace the decimal placeholders - the values will all be the same
+              placeHolderReplacementValues = [iteration] * placeHolderCount
+
+              # Replace the decimal placeholders using the list - the syntax below expands the list
+              resourceString = resourceString % (*placeHolderReplacementValues,)
+
+              # Convert the string back to JSON and return it
+              return json.loads(resourceString)
+
+            else:
+              print("No occurrences of decimal placeholder found in JSON, therefore nothing will be replaced")
+              return resource_structure
+          
+          def multiply(resource_name, resource_structure, count):
+            resources = {}
+
+            # Loop according to the number of times we want to multiply, creating a new resource each time
+            for iteration in range(1, (count + 1)):
+              print("Multiplying '{}', iteration count {}".format(resource_name, iteration))
+              multipliedResourceStructure = update_placeholder(resource_structure, iteration)
+              resources[resource_name + str(iteration)] = multipliedResourceStructure
+            
+            return resources
+          
+          def handler(event, context):
+            result = process_template(event['fragment'], event['templateParameterValues'])
+
+            return {
+              'requestId': event['requestId'],
+              'status': result[0],
+              'fragment': result[1]
+            }
+
+  AWSLambdaExecutionRole:
+     Type: AWS::IAM::Role
+     Properties:
+       AssumeRolePolicyDocument:
+         Statement:
+         - Action:
+           - sts:AssumeRole
+           Effect: Allow
+           Principal:
+             Service:
+             - lambda.amazonaws.com
+         Version: '2012-10-17'
+       Path: "/"
+       Policies:
+       - PolicyDocument:
+           Statement:
+           - Action:
+             - logs:CreateLogGroup
+             - logs:CreateLogStream
+             - logs:PutLogEvents
+             Effect: Allow
+             Resource: arn:aws:logs:*:*:*
+           Version: '2012-10-17'
+         PolicyName: !Sub ${AWS::StackName}-${AWS::Region}-AWSLambda-CW
+       RoleName: !Sub ${AWS::StackName}-${AWS::Region}-AWSLambdaExecutionRole
+
+
+
+
+
+
+-- which is going to create this macro for us.
+
+-- So the resource type is of type CloudFormation macro
+
+-- deploy stack 
+
+-- So this is going to create lambda function and my lambda function is going to be backing my macro.
+
+
+
+2
+
+-- create template.yaml file 
+
+
+
+Transform: Count
+
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Count: 3
+    Properties:
+      Tags:
+        - Key: TestKey
+          Value: my bucket %d
+
+
+
+
+-- in this example, we have a transformed counts on an S3 buckets.
+
+-- as you can see this count property, is not recognized by CFN lint, because, well, it doesn't know about the accounts by a macro.
+
+-- so what will happen is that we'll have three S3 buckets created as part of this templates and then the tags are going to change.
+
+-- now deploy the template.yaml stack 
+
+-- so my template is going to be based on to this lambda function because in the templates we are using this counts macro.
+
+-- template --> View processed template , it will gives u entire template 
+
+-- once complete the stack u can see 3 buckets created 
+
+
+
+
+
+
+
+
+
+
+======================================================== AWS CLOUDFORMATION AWS CLI =========================================================
+
+
+
+
+-- So we're going to upload this simple template into cloud shell to be able to apply directly within cloud formation, 
+
+
+
+
+
+Metadata: 
+  License: Apache-2.0
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation Sample Template Sample template EIP_With_Association:
+  This template shows how to associate an Elastic IP address with an Amazon EC2 instance
+  - you can use this same technique to associate an EC2 instance with an Elastic IP
+  Address that is not created inside the template by replacing the EIP reference in
+  the AWS::EC2::EIPAssoication resource type with the IP address of the external EIP.
+  **WARNING** This template creates an Amazon EC2 instance and an Elastic IP Address.
+  You will be billed for the AWS resources used if you create a stack from this template.'
+Parameters:
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t3.small
+    AllowedValues: [t2.nano, t2.micro, t2.small, t2.medium, t2.large, t2.xlarge, t2.2xlarge,
+      t3.nano, t3.micro, t3.small, t3.medium, t3.large, t3.xlarge, t3.2xlarge,
+      m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge,
+      m5.large, m5.xlarge, m5.2xlarge, m5.4xlarge,
+      c5.large, c5.xlarge, c5.2xlarge, c5.4xlarge, c5.9xlarge,
+      g3.8xlarge,
+      r5.large, r5.xlarge, r5.2xlarge, r5.4xlarge,
+      i3.xlarge, i3.2xlarge, i3.4xlarge, i3.8xlarge,
+      d2.xlarge, d2.2xlarge, d2.4xlarge, d2.8xlarge]
+    ConstraintDescription: must be a valid EC2 instance type.
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  LatestAmiId:
+    Type:  'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      UserData: !Base64
+        Fn::Join:
+        - ''
+        - [IPAddress=, !Ref 'IPAddress']
+      InstanceType: !Ref 'InstanceType'
+      SecurityGroups: [!Ref 'InstanceSecurityGroup']
+      KeyName: !Ref 'KeyName'
+      ImageId: !Ref 'LatestAmiId'
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Ref 'SSHLocation'
+  IPAddress:
+    Type: AWS::EC2::EIP
+  IPAssoc:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref 'EC2Instance'
+      EIP: !Ref 'IPAddress'
+Outputs:
+  InstanceId:
+    Description: InstanceId of the newly created EC2 instance
+    Value: !Ref 'EC2Instance'
+  InstanceIPAddress:
+    Description: IP address of the newly created EC2 instance
+    Value: !Ref 'IPAddress'
+
+
+
+
+
+
+-- create parameter.json file 
+
+
+
+[
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t2.micro"
+  },
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "seds"
+  },
+  {
+    "ParameterKey": "SSHLocation",
+    "ParameterValue": "0.0.0.0/0"
+  }
+]
+
+
+
+
+-- change keyname of urs 
+
+
+-- upload these files into cloudshell 
+
+-- enter the below command to deploy the stack from AWS Cli 
+
+      aws cloudformation create-stack --stack-name example-cli-stack --template-body file://0-sample-template.yaml --parameters file://0-parameters.json
+
+
+-- now delete the stack 
+
+
+      aws cloudformation delete-stack --stack-name example-cli-stack
+
+
+
+
+
+
+
+
+
+
+-------------------------------------------------------- Advanced Concepts & 3rd Party Tools
+
+
+
+
+Former2
+Former2 allows you to generate IaC (ex. CloudFormation templates) from existing resources https://github.com/iann0036/former2
+
+          Everything happens in the browser (it’s a client-side web app)
+
+          Requires IAM keys with ReadOnlyAccess
+
+          The following outputs are currently supported:
+
+          CloudFormation templates
+
+          Terraform
+
+          Troposphere
+
+          CDK (Cfn Primitives) – TypeScript, Python, C#, Java
+
+          CDK for Terraform – TypeScript
+
+          Pulumi – TypeScript
+
+          Diagram – an embedded version of draw.io
+
+
+TaskCat
+A tool that automates the testing of CloudFormation templates https://github.com/aws-quickstart/taskcat
+
+      Deploys your template in multiple AWS Regions simultaneously
+
+      Generates a report with a pass/fail result for each Region
+
+      You provide
+
+            AWS Regions and the number of AZs you want to include in the test
+
+            Template parameters’ values
+
+
+
+cfn-nag
+A tool that looks for patterns in CloudFormation templates that may indicate insecure infrastructure https://github.com/stelligent/cfn_nag
+
+Examples:
+
+      IAM rule and Security Group rules that are too permissive (wildcards)
+
+      Access logs and Encryption that aren’t enabled
+
+      Password literals
+
+
+
+CloudFormation cheatsheet
+Summarizes the usage of !Ref and !GetAtt with CloudFormation resources https://theburningmonk.com/cloudformation-ref-and-getatt-cheatsheet/
+
+
+
+aws-cfn-template-flip
+A tool that converts CloudFormation templates between JSON and YAML formats https://github.com/awslabs/aws-cfn-template-flip
+
+
+
+cfn-diagram
+A tool to visualize CloudFormation/SAM/CDK templates as diagrams https://github.com/mhlabs/cfn-diagram
+
+Generates https://draw.io and HTML diagrams
+
+Select only the resources you want (filter by resource type/name)
+
+Different layouts
+
+Supports JSON and YAML
+
+
+
+cfn-format
+A tool that reads a CloudFormation template and outputs a cleanly-formatted copy adhering to CloudFormation standards https://github.com/awslabs/aws-cloudformation-template-formatter
+
+
+
+awesome-cloudformation
+Reference list for open-source projects related to CloudFormation: https://github.com/aws-cloudformation/awesome-cloudformation
+
+
+
+
+
+
+
+
+------------------------------------------------------------- Template Validation
+
+
+
+
+-- You can validate your CloudFormation template to catch syntax and semantic errors, before CloudFormation creates any resources
+
+      - CloudFormation Console automatically validates the template after you specify input parameters
+
+      - AWS CLI CloudFormation validate-template command
+
+
+-- cfn-lint: https://github.com/aws-cloudformation/cfn-lint
+
+      - Validate CloudFormation templates JSON/YAML against resource specification (properties and their values)
+
+
+-- cfn-guard: https://github.com/aws-cloudformation/cloudformation-guard
+
+      - Validate CloudFormation templates for compliance to organization policy guidelines
+
+      - You define your own rules
+
+      - Example: ensure users always create encrypted S3 buckets
+ 
+      - Can be used as part of CI/CD pipeline
+
+
+
+
+
+
+
+
+
+------------------------------------------------------------- Template Snippets & Samples
+
+
+
+https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/CHAP_TemplateQuickRef.html
+
+
+https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-sample-templates.html
+
+
+https://github.com/awslabs/aws-cloudformation-templates
+
+
+
+https://github.com/awslabs
